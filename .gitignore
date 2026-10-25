@@ -1,0 +1,13 @@
+.DS_Store
+**/.DS_Store
+._*
+node_modules/
+
+# Copias de seguridad locales
+Backup/
+
+# Claude Code
+.claude/
+
+# Prompt de arranque (no se publica)
+PROMPT_NUEVA_SESION.md

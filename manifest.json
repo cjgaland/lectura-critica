@@ -1,0 +1,20 @@
+{
+  "name": "Lectura Crítica · Leer un artículo con método",
+  "short_name": "Lectura Crítica",
+  "description": "Lee críticamente un artículo paso a paso: qué tipo de estudio es, si es válido, qué dice y si te sirve, con las preguntas de eliminación primero",
+  "id": "./",
+  "scope": "./",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0d1b2a",
+  "theme_color": "#0d1b2a",
+  "lang": "es",
+  "icons": [
+    { "src": "icon-192.png?v=1", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png?v=1", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-180.png?v=1", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png?v=1", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "categories": ["medical", "education", "productivity"]
+}
