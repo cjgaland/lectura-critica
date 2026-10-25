@@ -1,6 +1,6 @@
 // ============================================================
 //  plantillas.js — Solo datos · Lectura Crítica
-//  Las 8 plantillas de lectura (preguntas y pistas PROPIAS, escritas por los
+//  Las 8 plantillas CASPe y la plantilla propia de estudios antes-después (preguntas y pistas PROPIAS, escritas por los
 //  autores sobre los criterios aceptados de validez, resultados y
 //  aplicabilidad; no reproducen el texto de CASPe, que se cita y se enlaza)
 //  y el árbol «¿Qué tipo de estudio tengo?».
@@ -395,6 +395,59 @@
     }
   ];
 
+  // Plantilla PROPIA (no hay plantilla CASPe para este diseño, el más frecuente en calidad).
+  // Basada en SQUIRE 2.0 y en los criterios de riesgo de sesgo de las series temporales interrumpidas de Cochrane EPOC.
+  PLANTILLAS.push({
+    id: "antesdespues", nombre: "Estudio antes-después o de mejora", corto: "Antes-después", version: 1, propia: true,
+    que: "Mide algo antes y después de introducir un cambio (un protocolo, una alerta, un programa de mejora), sin repartir al azar. Es el diseño más frecuente en calidad, pero otras cosas que cambian a la vez pueden explicar la mejora.",
+    cita: "Plantilla propia de los autores, basada en SQUIRE 2.0 (Ogrinc G, Davies L, Goodman D, Batalden P, Davidoff F, Stevens D. BMJ Qual Saf. 2016;25(12):986-92) y en los criterios de riesgo de sesgo de las series temporales interrumpidas de Cochrane EPOC (Cochrane Effective Practice and Organisation of Care, 2017).",
+    url: "https://www.squire-statement.org/",
+    bloques: [
+      { id: "validez", preguntas: [
+        P("ad-1", "¿Están claros el problema, el contexto y qué se cambió exactamente?", [
+          "¿Se entiende qué problema se quería mejorar, dónde (unidad, centro, tipo de pacientes) y por qué?",
+          "¿Se describe la intervención con detalle suficiente para saber qué se hizo: quién, cuándo, cómo y con qué intensidad?",
+          "Si no sabes qué se cambió, no podrás saber si te sirve."], { elim: true }),
+        P("ad-2", "¿Se midió lo mismo, de la misma forma, antes y después?", [
+          "¿Es el mismo indicador, con la misma definición, la misma fuente de datos y el mismo tipo de pacientes en los dos periodos?",
+          "Si cambió la forma de registrar (por ejemplo, una historia clínica nueva), el «cambio» puede ser solo un cambio en la medida."], { elim: true }),
+        P("ad-3", "¿Hay varias mediciones antes y después, y no solo dos fotos?", [
+          "Con un solo dato antes y otro después no se sabe si el indicador ya venía mejorando solo.",
+          "Lo ideal es una serie temporal: al menos tres puntos antes y tres después (mejor, ocho o más), con un gráfico de control o de serie temporal.",
+          "¿Se ve un salto o un cambio de tendencia justo cuando empieza la intervención?"]),
+        P("ad-4", "¿Se descartan otras explicaciones de la mejora?", [
+          "¿Cambiaron otras cosas a la vez: plantilla, protocolos, otros programas, la época del año, el tipo de pacientes?",
+          "¿Hay un grupo de comparación (otra unidad u otro centro sin la intervención) que no mejoró?",
+          "Sin grupo de comparación, cualquier cambio general del sistema se confunde con el efecto de la intervención."]),
+        P("ad-5", "¿Se evitó empezar justo en el peor momento?", [
+          "Si se decidió intervenir porque los datos estaban peor que nunca, lo esperable es que mejoren solos (regresión a la media).",
+          "¿Explican por qué se eligió ese momento? ¿Cómo estaba el indicador los meses anteriores?"]),
+        P("ad-6", "¿Los datos están completos y se midieron sin sesgos?", [
+          "¿Faltan datos de algún periodo, unidad o tipo de paciente?",
+          "¿Quien medía sabía que se estaba evaluando una mejora? Saberse observado cambia la conducta (efecto Hawthorne).",
+          "¿Cuentan también los resultados que no mejoraron o los efectos no deseados?"])
+      ] },
+      { id: "resultados", preguntas: [
+        P("ad-7", "¿Cuánto cambió el resultado y con qué precisión?", [
+          "Busca el valor antes y después, la diferencia absoluta y su intervalo de confianza, o el análisis de la serie temporal (cambio de nivel y de tendencia).",
+          "En la calculadora, pon el periodo «antes» como grupo control y el «después» como grupo intervención."], { resp: "abierta", calc: "tratamiento" }),
+        P("ad-8", "¿Se mantuvo la mejora en el tiempo?", [
+          "¿Cuánto tiempo se siguió midiendo después del cambio?",
+          "Muchas mejoras se desvanecen cuando se deja de vigilar: busca datos de varios meses después."])
+      ] },
+      { id: "aplicabilidad", preguntas: [
+        P("ad-9", "¿Se parece su contexto al tuyo?", [
+          "Tipo de centro, recursos, cultura de la unidad, liderazgo, sistemas de información.",
+          "Lo que funciona en un sitio puede no funcionar en otro si depende de cosas que tú no tienes."]),
+        P("ad-10", "¿Explican lo necesario para hacerlo tú: recursos, costes, barreras y cómo las superaron?", [
+          "Busca qué hizo falta (tiempo, personas, formación, tecnología) y qué dificultades encontraron.",
+          "Un buen artículo de mejora cuenta también lo que no funcionó."]),
+        P("ad-11", "¿Los beneficios compensan el esfuerzo, los costes y los posibles efectos no deseados?", [
+          "Piensa en lo que costaría en tu unidad y en lo que podría empeorar (más carga de trabajo, alertas que se ignoran)."], { resp: "sn" })
+      ] }
+    ]
+  });
+
   // ---------- Árbol «¿Qué tipo de estudio tengo?» ----------
   // Cada nodo: si / no → id de otro nodo o { fin: idPlantilla | "antesdespues" | "sinplantilla" }.
   // «No lo sé» sigue por el camino del «no» y se recuerda para avisar al final.
@@ -411,7 +464,7 @@
   ];
   // Finales del árbol que no son una plantilla
   const FINALES = {
-    antesdespues: { titulo: "Estudio de intervención no aleatorio (antes y después, grupo control no aleatorio)", texto: "Es un diseño muy frecuente en calidad, pero no hay plantilla CASPe para él y sus resultados son menos fiables: otras cosas que cambian a la vez pueden explicar la mejora. Mientras llega una plantilla propia, puedes leerlo con la del ensayo clínico, sabiendo que fallará la pregunta del reparto al azar.", plantilla: "ensayo" },
+    antesdespues: { titulo: "Estudio de intervención no aleatorio (antes y después, grupo control no aleatorio)", texto: "Es un diseño muy frecuente en calidad, pero no hay plantilla CASPe para él y sus resultados son menos fiables: otras cosas que cambian a la vez pueden explicar la mejora. Léelo con nuestra plantilla propia de estudios antes-después o de mejora.", plantilla: "antesdespues" },
     sinplantilla: { titulo: "Sin plantilla: estudio transversal, serie de casos u opinión", texto: "Una foto en un momento (estudio transversal), una serie de casos o una opinión de expertos aportan pruebas de nivel bajo y no tienen plantilla. Sirven para generar preguntas, rara vez para cambiar la práctica. Busca si hay un estudio mejor sobre lo mismo.", plantilla: "" }
   };
   // Qué plantilla corresponde a cada pregunta del árbol (para el aviso de las respuestas «No lo sé»)

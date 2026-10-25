@@ -1327,3 +1327,63 @@ input.calc-in--txt { text-align: left; font: 500 15px var(--font); }
 .fg-txt--um { fill: var(--cyan); font-weight: 800; }
 .tabla-scroll { overflow-x: auto; max-width: 100%; }
 @media (max-width: 480px) { .tabla-res { font-size: 12.5px; } .tabla-res th, .tabla-res td { padding: 5px 4px; } }
+
+/* ---------- Entrega 3: documentos, club, sesiones, didáctica ---------- */
+.dos-col { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 12px; }
+@media (min-width: 620px) { .dos-col { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.recuerda--det summary { cursor: pointer; font-size: 12.5px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: var(--text-3); }
+.recuerda--det p { font-weight: 500; white-space: pre-wrap; font-size: 14px; }
+.pubmed .seg { margin: 6px 0; }
+.pubmed .formula { word-break: break-word; }
+.item-card--sesion { border-left: 5px solid var(--cyan); }
+.ses-lista { display: grid; gap: 8px; }
+.ses-fila { display: grid; gap: 4px; padding: 10px 12px; border-radius: var(--radius); background: var(--bg-2); border: 1px solid var(--border); }
+.ses-fila a { text-decoration: none; color: var(--text-1); }
+.ses-rc { font-size: 13px; color: var(--text-2); }
+.ses-fila .link-btn { justify-self: start; font-size: 13px; }
+.ses-anadir { display: grid; gap: 10px; margin-top: 12px; }
+.ses-anadir > .btn { justify-self: start; }
+.doc-graf { display: grid; gap: 6px; margin: 8px 0; }
+.doc-graf .pictos { max-width: 420px; }
+/* Club de lectura */
+.club-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.club-asist summary { cursor: pointer; }
+.club-asis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin: 8px 0; }
+.club-a { display: flex; gap: 4px; align-items: center; }
+.club-a input { flex: 1; min-width: 0; }
+.club-pills { display: flex; flex-wrap: wrap; gap: 5px; margin: 12px 0; }
+.club-pill { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; font-weight: 800; font-size: 13px; text-decoration: none; color: var(--text-2); background: var(--bg-2); border: 2px solid var(--border-lite); }
+.club-pill--elim { border-color: var(--cyan); }
+.club-pill--si, .club-pill--hecha { background: var(--green-dim); color: var(--green); }
+.club-pill--no { background: var(--red-dim); color: var(--red); }
+.club-pill--nose { background: var(--amber-dim); color: var(--amber); }
+.club-pill.actual { outline: 3px solid var(--cyan); outline-offset: 1px; }
+.club-q h2 { font-size: 20px; margin: 6px 0 8px; line-height: 1.3; }
+.club-votos { display: grid; gap: 6px; margin: 10px 0; }
+.club-fila { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 8px; align-items: center; }
+.club-fila > span { font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis; }
+.club-fila .seg button { min-height: 38px; padding: 6px 4px; font-size: 13px; }
+.club-barra { display: flex; border-radius: 10px; overflow: hidden; margin: 10px 0; font-size: 12.5px; font-weight: 800; color: #fff; }
+.club-b { padding: 6px 8px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.club-b--si { background: var(--green); } .club-b--no { background: var(--red); } .club-b--nose { background: var(--amber); }
+:root[data-tema="oscuro"] .club-b { color: #0d1b2a; }
+/* Modo proyector: letra grande y pantalla limpia */
+body.modo-proyector .app-header, body.modo-proyector .calc-nav, body.modo-proyector .app-footer, body.modo-proyector .banner-ejemplo { display: none; }
+body.modo-proyector .view { max-width: 1200px; font-size: 20px; }
+body.modo-proyector .club-q h2 { font-size: 34px; }
+body.modo-proyector .pistas ul, body.modo-proyector .club-fila > span { font-size: 19px; }
+body.modo-proyector .seg--resp button { font-size: 19px; min-height: 52px; }
+body.modo-proyector .club-barra { font-size: 17px; }
+body.modo-proyector .club-asist, body.modo-proyector .page-lead { display: none; }
+/* Didáctica */
+.tema-pills--wrap { flex-wrap: wrap; }
+.ej-card--sesion { display: grid; gap: 2px; margin: 6px 0 10px; padding: 14px; border-radius: var(--radius-lg); border: 1.5px solid var(--cyan); background: var(--cyan-dim); text-decoration: none; color: var(--text-1); }
+.ej-card--sesion span { font-size: 13.5px; color: var(--text-2); }
+.ej-tipos { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip--ok { background: var(--green); border-color: var(--green); color: #fff; }
+.chip--mal { background: var(--red); border-color: var(--red); color: #fff; }
+:root[data-tema="oscuro"] .chip--ok, :root[data-tema="oscuro"] .chip--mal { color: #0d1b2a; }
+.ej-calc { display: flex; gap: 8px; align-items: center; max-width: 320px; }
+.ej-calc input { flex: 1; }
+.preguntas > *, .calc-card > *, .semaforos > * { min-width: 0; }
+.table-wrap { overflow-x: auto; max-width: 100%; }

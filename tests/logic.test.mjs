@@ -10,9 +10,10 @@ const eq = (nombre, a, b) => t(`${nombre} (esperado ${JSON.stringify(b).slice(0,
 let n = 0; const gid = () => "id" + (++n);
 
 // ---------- Plantillas: las cuentas del capítulo 26 y las preguntas de eliminación de cada original ----------
-const CUENTAS = { ensayo: 11, revision: 10, diagnostico: 10, cohortes: 11, casos: 11, cualitativo: 10, economica: 11, prediccion: 11 };
-const ELIM = { ensayo: 3, revision: 2, diagnostico: 3, cohortes: 2, casos: 2, cualitativo: 3, economica: 2, prediccion: 3 };
-eq("Ocho plantillas", PL.PLANTILLAS.map(p => p.id).sort(), Object.keys(CUENTAS).sort());
+const CUENTAS = { ensayo: 11, revision: 10, diagnostico: 10, cohortes: 11, casos: 11, cualitativo: 10, economica: 11, prediccion: 11, antesdespues: 11 };
+const ELIM = { ensayo: 3, revision: 2, diagnostico: 3, cohortes: 2, casos: 2, cualitativo: 3, economica: 2, prediccion: 3, antesdespues: 2 };
+eq("Ocho plantillas CASPe y la propia", PL.PLANTILLAS.map(p => p.id).sort(), Object.keys(CUENTAS).sort());
+eq("Solo la de antes-después es propia", PL.PLANTILLAS.filter(p => p.propia).map(p => p.id), ["antesdespues"]);
 PL.PLANTILLAS.forEach(p => {
   const qs = L.preguntasDe(p);
   eq(`${p.nombre}: número de preguntas`, qs.length, CUENTAS[p.id]);
@@ -21,10 +22,10 @@ PL.PLANTILLAS.forEach(p => {
   eq(`${p.nombre}: tres bloques en orden`, p.bloques.map(b => b.id), ["validez", "resultados", "aplicabilidad"]);
   t(`${p.nombre}: ids únicos y con su prefijo`, new Set(qs.map(q => q.id)).size === qs.length && qs.every((q, i) => q.id === `${L.PREFIJOS[p.id]}-${i + 1}`));
   t(`${p.nombre}: todas con texto y pistas`, qs.every(q => q.texto.length > 10 && q.pistas.length >= 1));
-  t(`${p.nombre}: cita y enlace`, p.cita.includes("CASPe") && /^https:\/\/redcaspe\.org\//.test(p.url));
+  t(`${p.nombre}: cita y enlace`, p.propia ? /SQUIRE/.test(p.cita) && /^https:\/\//.test(p.url) : p.cita.includes("CASPe") && /^https:\/\/redcaspe\.org\//.test(p.url));
   t(`${p.nombre}: respuestas válidas`, qs.every(q => ["snd", "sn", "abierta"].includes(q.resp)));
 });
-t("Prefijos distintos", new Set(Object.values(L.PREFIJOS)).size === 8);
+t("Prefijos distintos", new Set(Object.values(L.PREFIJOS)).size === 9);
 t("Las preguntas clave de aplicabilidad existen", [...L.CLAVE_APLICA].every(id => PL.PLANTILLAS.some(p => L.preguntasDe(p, "aplicabilidad").some(q => q.id === id))));
 // Nuestras preguntas no son las de CASPe: ninguna coincide con la frase original de la pregunta 1 del ensayo
 t("Texto propio (ec-1)", !/orienta el ensayo a una pregunta claramente definida/i.test(L.preguntasDe(L.plantilla("ensayo"))[0].texto));
@@ -179,6 +180,86 @@ eq("Siguiente paso: la más reciente", L.siguientePaso({ lecturas: [l2, l] }).hr
   eq("Niveles empieza con tres filas", L.nuevoCalculo("c3", "niveles").niveles.length, 3);
   const s = L.sanearLectura({ id: "x", calculos: [{ id: "k1", tipo: "inventada" }, { id: "k2", tipo: "diagnostico", entrada: { a: "90", z: "no" }, niveles: [{ a: 1 }, 2] }] }, gid, "");
   eq("Saneado de calculadoras", [s.calculos.length, s.calculos[0].tipo, s.calculos[1].entrada.a, "z" in s.calculos[1].entrada, s.calculos[1].niveles.length], [2, "tratamiento", "90", false, 1]);
+}
+
+// ---------- Club de lectura ----------
+{
+  const lv = L.nuevaLectura("lv", "2026-10-26");
+  L.cambiarPlantilla(lv, "ensayo");
+  lv.club.asistentes = ["a1", "a2", "a3", "a4"].map(id => L.nuevoAsistente(id, "Asistente " + id));
+  L.ponerVoto(lv, "ec-2", "a1", "si"); L.ponerVoto(lv, "ec-2", "a2", "si"); L.ponerVoto(lv, "ec-2", "a3", "no");
+  eq("Reparto de votos", L.reparto(lv, "ec-2"), { si: 2, no: 1, nose: 0, total: 3 });
+  eq("Mayoría", L.mayoria(lv, "ec-2"), "si");
+  t("Discrepancia Sí/No", L.discrepancia(lv, "ec-2"));
+  L.ponerVoto(lv, "ec-2", "a4", "no");
+  eq("Empate: sin mayoría", L.mayoria(lv, "ec-2"), "");
+  L.ponerVoto(lv, "ec-2", "a4", "no");
+  eq("Votar lo mismo otra vez lo quita", L.reparto(lv, "ec-2").total, 3);
+  lv.club.asistentes = lv.club.asistentes.filter(a => a.id !== "a3");
+  eq("Solo cuentan los asistentes que siguen", L.reparto(lv, "ec-2"), { si: 2, no: 0, nose: 0, total: 2 });
+  t("Sin discrepancia", !L.discrepancia(lv, "ec-2"));
+  const sv = L.sanearLectura(JSON.parse(JSON.stringify(lv)), gid, "");
+  eq("Saneado: votos de asistentes que no existen fuera", sv.club.votos["ec-2"], { a1: "si", a2: "si" });
+  const sm = L.sanearLectura({ id: "x", club: { asistentes: [{ id: "a1", nombre: "Ana" }], votos: { "ec-1": { a1: "quizá", a9: "si" }, malo: { a1: "si" } } } }, gid, "");
+  eq("Saneado: votos raros fuera", sm.club.votos, {});
+}
+
+// ---------- Sesiones ----------
+{
+  const s1 = Object.assign(L.nuevaSesion("s1", "2026-10-26"), { titulo: "Escalas", lecturas: ["l1", "nohay", "l2"] });
+  const d = L.sanearDatos({ lecturas: [l, l2], sesiones: [s1, "basura"] }, gid, "2026-10-26");
+  eq("Sesiones saneadas, sin lecturas que no existen", d.sesiones.map(s => s.lecturas), [["l1", "l2"]]);
+  eq("Lecturas de una sesión", L.lecturasDeSesion(d.sesiones[0], d.lecturas).map(x => x.id), ["l1", "l2"]);
+  const f = L.fusionar({ lecturas: [], sesiones: [Object.assign({}, s1, { modificado: "2026-01-01", titulo: "vieja" })] }, { lecturas: [], sesiones: [Object.assign({}, s1, { modificado: "2026-02-01", titulo: "nueva" })] });
+  eq("Fusión de sesiones", f.sesiones.map(s => s.titulo), ["nueva"]);
+  eq("Copias antiguas sin sesiones", L.sanearDatos({ lecturas: [] }, gid, "").sesiones, []);
+}
+
+// ---------- Intercambio ----------
+{
+  const lc = L.nuevaLectura("lx", "2026-10-26");
+  Object.assign(lc, { titulo: "Ensayo de prueba" }); Object.assign(lc.pico, { p: "a", i: "b", o: "c" });
+  L.cambiarPlantilla(lc, "ensayo");
+  const c = L.nuevoCalculo("cx", "tratamiento"); Object.assign(c.entrada, { nc: "150", ne: "150", ec: "30", ee: "15" }); lc.calculos.push(c);
+  lc.veredicto.decision = "aplicar";
+  const ej = Object.assign(L.nuevaLectura("ej-u-ec", ""), { titulo: "ejemplo" });
+  const P = L.paqueteIntercambio([lc, ej], "2026.03", "2026-10-26T10:00:00Z");
+  eq("Paquete: formato y versión", [P.formato, P.version, P.app], ["lecturacritica-lecturas", 1, "lecturacritica"]);
+  eq("Paquete: sin ejemplos", P.lecturas.map(x => x.id), ["lx"]);
+  const x = P.lecturas[0];
+  eq("Paquete: tipo, decisión y resultado clave", [x.tipo, x.tipoNombre, x.decision, x.resultadosClave[0].medida, x.resultadosClave[0].valor], ["ensayo", "Ensayo clínico", "aplicar", "NNTB", 10]);
+  t("Paquete: números, no textos", typeof x.resultadosClave[0].icInf === "number" && x.semaforo.validez === null);
+  t("Paquete: se puede leer", L.leerIntercambio(JSON.parse(JSON.stringify(P))).length === 1 && L.leerIntercambio({ formato: "otro", version: 1, lecturas: [] }) === null && L.leerIntercambio(Object.assign({}, P, { version: 2 })) === null);
+  eq("Pregunta propuesta en el paquete", x.pregunta, "En a, ¿b mejora c?");
+}
+
+// ---------- PubMed ----------
+{
+  const lp = L.nuevaLectura("lp", ""); Object.assign(lp.pico, { p: "emergency department waiting room", i: "early warning score", c: "", o: "clinical deterioration" });
+  const b = L.busquedaPubMed(lp, "revision");
+  eq("PubMed: consulta", b.consulta, "(emergency department waiting room) AND (early warning score) AND (clinical deterioration) AND systematic[sb]");
+  t("PubMed: enlace", b.url.startsWith("https://pubmed.ncbi.nlm.nih.gov/?term=") && b.url.includes("systematic%5Bsb%5D"));
+  t("PubMed: sin PICO, nada", L.busquedaPubMed(L.nuevaLectura("z", ""), "") === null);
+  t("PubMed: sin paréntesis ni comillas sueltas", !/"/.test(L.busquedaPubMed(Object.assign(L.nuevaLectura("z", ""), { pico: { p: 'a "b" (c)', i: "", c: "", o: "" } }), "").consulta));
+}
+
+// ---------- Documentos y Excel ----------
+{
+  const D = require("../docx.js"), X = require("../xlsx.js");
+  const fi = L.documentoFicha(l, "26/10/2026");
+  t("Ficha: portada, tres partes y cita", fi.bloques[0].t === "portada" && fi.bloques.filter(b => b.t === "h1").length === 3 && /CASPe/.test(fi.bloques[fi.bloques.length - 1].texto));
+  t("Ficha: una tabla por bloque con todas las preguntas", fi.bloques.filter(b => b.t === "tabla" && b.cab && b.cab[0] === "Nº").reduce((s, b) => s + b.filas.length, 0) === 11);
+  t("Ficha: Word válido", D.construirDocx(Object.assign({ pie: "x" }, fi)).length > 2000);
+  const fd = L.documentoFicha(l2, "26/10/2026");
+  t("Ficha de una lectura descartada en el filtro", fd.bloques.some(b => b.runs && /no responde/.test(b.runs[1].texto)));
+  PL.PLANTILLAS.forEach(p => { const d = L.documentoPlantilla(p); t(`Plantilla en blanco de ${p.nombre}`, d.bloques.filter(b => b.t === "tabla").reduce((s, b) => s + b.filas.length, 0) === L.preguntasDe(p).length && D.construirDocx(Object.assign({ pie: "x" }, d)).length > 2000); });
+  const ses = Object.assign(L.nuevaSesion("s1", "2026-10-26"), { titulo: "Escalas", lecturas: ["l1", "l2"], decision: "aplicar" });
+  const ds = L.documentoSesion(ses, [l, l2], "26/10/2026");
+  t("Ficha de la sesión: una fila por artículo", ds.bloques.find(b => b.t === "tabla").filas.length === 2 && D.construirDocx(Object.assign({ pie: "x" }, ds)).length > 2000);
+  const libro = L.hojasExcel([l, l2], [ses], "26/10/2026");
+  eq("Excel: hojas", libro.hojas.map(h => h.nombre), ["Lecturas", "Respuestas", "Cálculos", "Desenlaces y acciones", "Sesiones"]);
+  t("Excel: se construye", X.construirLibroXlsx(libro).length > 3000);
+  t("Excel: sin sesiones, sin hoja de sesiones", L.hojasExcel([l], [], "x").hojas.length === 4);
 }
 
 // ---------- Saneado y fusión ----------

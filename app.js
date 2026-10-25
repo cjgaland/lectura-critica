@@ -9,13 +9,22 @@
 // ============================================================
 (function () {
   "use strict";
-  const L = window.Logica, PL = window.Plantillas, CA = window.Calculos;
+  const L = window.Logica, PL = window.Plantillas, CA = window.Calculos, C = window.Contenido;
 
   // ---------- Versión y novedades ----------
   // Al publicar cambios: añadir una entrada AL PRINCIPIO de NOVEDADES, poner su versión en los ?v= de index.html, en
   // APP_VERSION y subir CACHE_NAME en sw.js. Formato de versión: AAAA.NN.
-  const APP_VERSION = "2026.02";
+  const APP_VERSION = "2026.03";
   const NOVEDADES = [
+    { version: "2026.03", fecha: "Octubre 2026", titulo: "Fichas, sesiones, club de lectura y Aprende", cambios: [
+      "Ficha de la lectura en Word y PDF: la pregunta, cada respuesta, los resultados con su dibujo o su nomograma, el semáforo y la decisión. Y un Excel con todas tus lecturas.",
+      "Plantillas en blanco para imprimir y contestar a lápiz en el club de lectura.",
+      "Sesiones: junta varias lecturas sobre la misma pregunta y saca una conclusión conjunta, con su ficha.",
+      "Club de lectura: cada asistente vota Sí, No o No se puede saber; la app enseña el reparto, avisa si hay discrepancia y propone la mayoría. Con modo proyector.",
+      "Nueva plantilla propia para estudios antes-después o de mejora, el diseño más frecuente en calidad.",
+      "Buscar en PubMed con tu pregunta PICO, y un sitio para pegar el resumen del artículo.",
+      "Aprende (10 temas), Ponte a prueba (26 preguntas, adivina el tipo de estudio y calcula) y un glosario de 65 términos.",
+      "Ejemplo completo de Urgencias (una sesión con siete artículos ficticios) y siete minicasos para practicar."] },
     { version: "2026.02", fecha: "Octubre 2026", titulo: "Calculadoras de resultados", cambios: [
       "Calculadora de tratamiento: riesgos, riesgo relativo, reducción relativa y absoluta, NNT (para beneficiar o para dañar, también cuando el intervalo cruza el «sin efecto») y odds ratio, con sus intervalos de confianza.",
       "¿Y si los perdidos hubieran tenido el evento? Análisis de sensibilidad de las pérdidas con tres supuestos, y NNT para tu paciente según su riesgo.",
@@ -47,30 +56,41 @@
   const escribir = (k, v) => { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } };
 
   // ---------- Datos (solo en este dispositivo) ----------
-  const KEY_DATOS = "lecturacritica-datos";
-  const datos = { lecturas: [], ultimaCopia: null };
+  const KEY_DATOS = "lecturacritica-datos", KEY_INTERCAMBIO = "lecturacritica-intercambio";
+  const datosUsuario = { lecturas: [], sesiones: [], ultimaCopia: null };
   (function cargar() {
     const crudo = leer(KEY_DATOS); if (!crudo) return;
     try {
       const o = JSON.parse(crudo), s = L.sanearDatos(o, genId, hoy());
-      if (s) { datos.lecturas = s.lecturas; datos.ultimaCopia = typeof o.ultimaCopia === "string" ? o.ultimaCopia : null; }
+      if (s) { datosUsuario.lecturas = s.lecturas; datosUsuario.sesiones = s.sesiones; datosUsuario.ultimaCopia = typeof o.ultimaCopia === "string" ? o.ultimaCopia : null; }
     } catch (e) { /* datos dañados: se empieza de cero sin borrar lo guardado */ }
   })();
+  // Los datos del usuario son los únicos que se guardan. Los ejemplos viven aparte, en memoria
+  // (ids «ej-…»): se pueden tocar, pero ni se guardan ni se mezclan con los suyos.
+  let datos = datosUsuario, datosEjemplo = null, modoEjemplo = false;
+  const esIdEjemplo = id => /^ej-/.test(id || "");
+  function ejemplos() {
+    if (!datosEjemplo) datosEjemplo = { lecturas: C.EJEMPLOS.lecturas.map(x => L.sanearLectura(clon(x), genId, hoy())), sesiones: [L.sanearSesion(clon(C.EJEMPLOS.sesion), genId, hoy())], ultimaCopia: null };
+    return datosEjemplo;
+  }
   let tGuardar = null, avisoSinEspacio = false;
   function guardar(inmediato) {
     clearTimeout(tGuardar);
     const fn = () => {
-      const ok = escribir(KEY_DATOS, JSON.stringify({ app: "lecturacritica", v: L.VERSION_DATOS, ultimaCopia: datos.ultimaCopia, lecturas: datos.lecturas }));
+      const ok = escribir(KEY_DATOS, JSON.stringify({ app: "lecturacritica", v: L.VERSION_DATOS, ultimaCopia: datosUsuario.ultimaCopia, lecturas: datosUsuario.lecturas, sesiones: datosUsuario.sesiones }));
+      // Paquete con forma fija para que otras apps del mismo dominio lo lean («Traer de Lectura Crítica»); nunca leen lecturacritica-datos
+      try { escribir(KEY_INTERCAMBIO, JSON.stringify(L.paqueteIntercambio(datosUsuario.lecturas, APP_VERSION, hoy()))); } catch (e) { /* */ }
       if (!ok && !avisoSinEspacio) { avisoSinEspacio = true; toast("No se ha podido guardar en este navegador (¿modo privado o sin espacio?). Haz una copia de seguridad.", 6000); }
     };
     if (inmediato) fn(); else tGuardar = setTimeout(fn, 250);
   }
   window.addEventListener("pagehide", () => guardar(true));
   const buscaLectura = id => datos.lecturas.find(x => x.id === id);
+  const buscaSesion = id => datos.sesiones.find(x => x.id === id);
   // Una lectura recién creada no se guarda hasta que se escribe algo
   const borradores = new Map();
   const esVacia = l => !Object.keys(l.respuestas).length && !l.plantilla && !lleno(l.filtro.responde) && !l.desenlaces.length && !l.confusores.length && !lleno(l.veredicto.decision)
-    && ![l.titulo, l.pregunta, l.notas, ...Object.values(l.pico), ...Object.values(l.referencia)].some(lleno);
+    && !l.calculos.length && ![l.titulo, l.pregunta, l.notas, l.resumen, ...Object.values(l.pico), ...Object.values(l.referencia)].some(lleno);
 
   // ---------- Textos de ayuda reutilizables ----------
   const box = (tipo, tag, html) => `<div class="box box--${tipo}"><span class="box-tag">${tag}</span>${html}</div>`;
@@ -119,7 +139,8 @@
   const COLOR_TXT = { verde: "Verde", ambar: "Ámbar", rojo: "Rojo", "": "Sin decidir" };
   const luz = (c, txt) => `<span class="luz luz--${c || "sin"}" aria-hidden="true"></span>${txt ? `<span>${esc(txt)}</span>` : ""}`;
   const decisionBadge = d => d ? `<span class="badge badge--dec badge--${d}">${esc(L.DECISIONES[d].nom)}</span>` : "";
-  const citaPlantilla = pl => `<p class="cita-pl">Preguntas propias basadas en los criterios de la plantilla CASPe para ${esc(pl.nombre.toLowerCase())}. <a href="${esc(pl.url)}" target="_blank" rel="noopener">Ver la plantilla original ↗</a></p>`;
+  const citaPlantilla = pl => pl.propia ? `<p class="cita-pl">Plantilla propia, basada en SQUIRE 2.0 y en los criterios de Cochrane EPOC para series temporales. <a href="${esc(pl.url)}" target="_blank" rel="noopener">SQUIRE ↗</a></p>`
+    : `<p class="cita-pl">Preguntas propias basadas en los criterios de la plantilla CASPe para ${esc(pl.nombre.toLowerCase())}. <a href="${esc(pl.url)}" target="_blank" rel="noopener">Ver la plantilla original ↗</a></p>`;
 
   // ---------- Inicio ----------
   function renderHome() {
@@ -136,6 +157,7 @@
         <div class="hero-btns">
           <a class="btn btn--primary btn--grande" href="#/lecturas/nueva">+ Leer un artículo</a>
           <a class="btn btn--grande" href="#/lecturas">Mis lecturas${n ? ` <span class="contador">${n}</span>` : ""}</a>
+          <a class="btn btn--grande" href="#/ejemplos">Ver un ejemplo</a>
         </div>
       </section>
       <div class="siguiente">
@@ -171,7 +193,11 @@
         <div class="toolbar"><button class="btn" data-act="copia">⬇ Copia de seguridad</button><button class="btn" data-act="importar">⬆ Importar copia</button></div>
       </div>
       <div class="guide">
-        <a class="guide-card" href="#/plantillas"><span class="guide-num">8</span><div><div class="guide-q">Las plantillas</div><div class="guide-a">Las <b>ocho plantillas</b> con sus preguntas y pistas, y el enlace a las originales de CASPe.</div></div><span class="guide-go">›</span></a>
+        <a class="guide-card" href="#/ejemplos"><span class="guide-num">Ej</span><div><div class="guide-q">Ejemplos</div><div class="guide-a">La sesión completa de <b>Urgencias</b> (siete artículos, de la pregunta a la decisión) y <b>siete minicasos</b> para practicar.</div></div><span class="guide-go">›</span></a>
+        <a class="guide-card" href="#/aprende"><span class="guide-num">?</span><div><div class="guide-q">Aprende</div><div class="guide-a">${C.TEMAS.length} temas <b>explicados fácil</b>: del método a los sesgos, el NNT o los cocientes de probabilidad.</div></div><span class="guide-go">›</span></a>
+        <a class="guide-card" href="#/prueba"><span class="guide-num">✓</span><div><div class="guide-q">Ponte a prueba</div><div class="guide-a">${C.TEST.length} preguntas con su <b>explicación</b>, adivina el tipo de estudio y calcula.</div></div><span class="guide-go">›</span></a>
+        <a class="guide-card" href="#/glosario"><span class="guide-num">A–Z</span><div><div class="guide-q">Glosario</div><div class="guide-a">${C.GLOSARIO.length} términos <b>en lenguaje llano</b>, con buscador.</div></div><span class="guide-go">›</span></a>
+        <a class="guide-card" href="#/plantillas"><span class="guide-num">9</span><div><div class="guide-q">Las plantillas</div><div class="guide-a">Las <b>ocho plantillas</b> CASPe con nuestras preguntas, la propia de <b>antes-después</b> y su versión <b>en blanco</b> para imprimir.</div></div><span class="guide-go">›</span></a>
         <a class="guide-card" href="#/tipo"><span class="guide-num">?</span><div><div class="guide-q">¿Qué tipo de estudio tengo?</div><div class="guide-a">Unas preguntas de <b>sí o no</b> con las palabras que delatan cada diseño.</div></div><span class="guide-go">›</span></a>
         <a class="guide-card guide-card--hermana" href="${L.URL_TM}" target="_blank" rel="noopener"><span class="guide-num">n</span><div><div class="guide-q">Tamaño Muestral ↗</div><div class="guide-a">App hermana: <b>¿tenía el estudio muestra suficiente?</b> Calcula cuántos casos hacían falta.</div></div><span class="guide-go">›</span></a>
         <a class="guide-card guide-card--hermana" href="${L.URL_NORM}" target="_blank" rel="noopener"><span class="guide-num">“”</span><div><div class="guide-q">Normalizador Bibliográfico ↗</div><div class="guide-a">Herramienta de apoyo: pon la <b>referencia del artículo</b> en Vancouver, APA y otros estilos.</div></div><span class="guide-go">›</span></a>
@@ -186,7 +212,8 @@
     view.innerHTML = `
       <h1 class="page-title">Mis lecturas</h1>
       <p class="page-lead">Cada lectura es un artículo leído con su plantilla, hasta una decisión.</p>
-      <div class="toolbar no-print"><a class="btn btn--primary" href="#/lecturas/nueva">+ Leer un artículo</a></div>
+      <div class="toolbar no-print"><a class="btn btn--primary" href="#/lecturas/nueva">+ Leer un artículo</a><a class="btn" href="#/sesiones/nueva">+ Nueva sesión</a>${datos.lecturas.length ? `<button type="button" class="btn" data-act="excel">⬇ Excel de todas</button>` : ""}</div>
+      ${datos.sesiones.length ? `<h2 class="sec-t">Sesiones</h2><p class="field-sub">Varias lecturas sobre la misma pregunta, con una conclusión conjunta.</p><div class="cuadro-lista">${datos.sesiones.slice().sort((a, b) => String(b.modificado).localeCompare(String(a.modificado))).map(tarjetaSesion).join("")}</div><h2 class="sec-t">Lecturas</h2>` : ""}
       ${datos.lecturas.length > 3 ? `<div class="buscar"><input class="txt-in" id="buscar-lec" type="search" placeholder="Buscar por título, pregunta, tipo o decisión" value="${esc(filtroLista)}" autocomplete="off" /></div>` : ""}
       <div data-zona="lista">${listaInner()}</div>`;
   }
@@ -197,6 +224,14 @@
     if (!datos.lecturas.length) return `<div class="placeholder-box"><p><b>Todavía no has leído ningún artículo con la app.</b></p><p>Empieza por tu pregunta y el artículo que tienes entre manos.</p></div>`;
     if (!lista.length) return `<div class="placeholder-box"><p>Ninguna lectura coincide con «${esc(filtroLista)}».</p></div>`;
     return `<div class="cuadro-lista">${lista.map(tarjeta).join("")}</div>`;
+  }
+  function tarjetaSesion(x) {
+    const L_ = L.lecturasDeSesion(x, datos.lecturas);
+    return `<div class="item-card item-card--sesion">
+      <a class="item-main" href="#/sesion/${x.id}"><b class="item-t">📚 ${esc(x.titulo || "Sesión sin título")}</b>${lleno(x.pregunta) ? `<span class="item-s">${esc(L.corto(x.pregunta, 160))}</span>` : ""}
+        <span class="badges">${decisionBadge(x.decision)}<span class="badge">${plural(L_.length, "artículo", "artículos")}</span>${x.fecha ? `<span class="badge">${esc(L.fmtFecha(x.fecha))}</span>` : ""}</span></a>
+      <div class="item-pie"><span>Modificada: ${fechaCorta(x.modificado)}</span><span><button class="link-btn link-btn--peligro" data-act="ses-del" data-id="${x.id}">Borrar</button></span></div>
+    </div>`;
   }
   function tarjeta(l) {
     const r = L.resumen(l), pl = L.plantilla(l.plantilla), g = L.progreso(l), hechos = L.PASOS.filter(p => g[p.n]).length;
@@ -219,7 +254,7 @@
     actual = l; pasoActual = n; nAyuda = 0;
     const p = L.PASOS[n - 1], prev = L.PASOS[n - 2], next = L.PASOS[n];
     view.innerHTML = `
-      <div class="wiz-top no-print">${volver("#/lecturas", "Mis lecturas")}${pasosHtml(l, n)}</div>
+      <div class="wiz-top no-print">${volver(modoEjemplo ? "#/ejemplos" : "#/lecturas", modoEjemplo ? "Ejemplos" : "Mis lecturas")}${pasosHtml(l, n)}</div>
       <div class="wiz-titulo"><span class="wiz-paso">Paso ${n} de 7${lleno(nombreLectura(l)) ? " · " + esc(L.corto(nombreLectura(l), 60)) : ""}</span><h1 class="page-title">${p.titulo}</h1></div>
       ${RENDER[n](l)}
       <div class="wiz-nav no-print">${prev ? `<a class="btn" href="#/lectura/${l.id}/${prev.n}">← ${prev.corto}</a>` : `<span></span>`}${next ? `<a class="btn btn--primary" href="#/lectura/${l.id}/${next.n}">${next.corto} →</a>` : `<a class="btn btn--primary" href="#/lecturas">Terminar</a>`}</div>`;
@@ -241,6 +276,10 @@
         ${campo(l, "pico.c", "C · Comparación", { ph: "¿Frente a qué? Puede no haberla", area: true, rows: 1, opt: true })}
         ${campo(l, "pico.o", "O · Resultado", { ph: "¿Qué se mide? (outcome)", area: true, rows: 1 })}
         ${campo(l, "pregunta", "Tu pregunta, en una frase", { area: true, rows: 2, ph: "En [pacientes], ¿[intervención], frente a [comparación], mejora [resultado]?", extra: `<div data-zona="sugerida">${sugeridaHtml(l, sug)}</div>` })}
+        <details class="mas-datos pubmed"${modoEjemplo ? "" : ""}><summary>🔎 Buscar en PubMed con tu PICO</summary>
+          <p class="field-sub">PubMed busca en inglés: escribe los términos de P, I y O en inglés para encontrar más. Se abre en otra pestaña; la app no guarda nada fuera.</p>
+          <div class="seg seg--mini seg--wrap" role="group">${Object.entries(L.FILTROS_PUBMED).map(([k, t]) => `<button type="button" class="${filtroPubMed === k ? "active" : ""}" data-act="pubmed-filtro" data-v="${k}">${t}</button>`).join("")}</div>
+          <div data-zona="pubmed">${pubmedHtml(l)}</div></details>
       </div>
       <div class="card">
         <h2 class="sub-h">El artículo</h2>
@@ -255,7 +294,13 @@
           ${campo(l, "referencia.pmid", "PMID", { opt: true, modo: "numeric" })}
           ${campo(l, "referencia.url", "Enlace", { opt: true, ph: "https://…", tipo: "url" })}
         </details>
+        ${campo(l, "resumen", "Resumen del artículo", { area: true, rows: 3, opt: true, ph: "Pega aquí el resumen (abstract) o tus notas del artículo, para tenerlo a mano mientras contestas" })}
       </div>`;
+  }
+  let filtroPubMed = "";
+  function pubmedHtml(l) {
+    const b = L.busquedaPubMed(l, filtroPubMed);
+    return b ? `<p class="formula">${esc(b.consulta)}</p><a class="btn" href="${esc(b.url)}" target="_blank" rel="noopener">Abrir en PubMed ↗</a>` : `<p class="calc-vacia">Escribe los pacientes, la intervención o el resultado.</p>`;
   }
   const sugeridaHtml = (l, sug) => sug && !lleno(l.pregunta) ? `<div class="sugerida"><span>Propuesta: «${esc(sug)}»</span> <button type="button" class="link-btn" data-act="usar-pregunta">Usarla</button></div>` : "";
 
@@ -295,6 +340,8 @@
     return `<p class="page-lead">${esc(B.sub)} <span class="tipo-chip">${esc(pl.nombre)}</span></p>
       ${facil(FACIL_BLOQUE[bloque])}
       ${descartada ? `<div class="note">ℹ Has descartado este estudio. Puedes seguir contestando para aprender, pero no hace falta.</div>` : ""}
+      <div class="toolbar no-print"><a class="btn btn--ghost" href="#/lectura/${l.id}/club?q=${L.preguntasDe(pl).findIndex(q => q.bloque === bloque) + 1}">👥 Club de lectura: que vote cada asistente</a></div>
+      ${lleno(l.resumen) ? `<details class="recuerda recuerda--det"><summary>El resumen del artículo</summary><p>${esc(l.resumen)}</p></details>` : ""}
       ${avisosZona(l, n)}
       <div class="preguntas">${qs.map((q, i) => preguntaHtml(l, pl, q) + (n === 4 && q.elim && !(qs[i + 1] || {}).elim ? `<div data-zona="parada">${paradaHtml(l, el)}</div>` : "")).join("")}</div>
       <div class="sem-bloque" data-zona="sembloque">${semBloqueHtml(l, bloque)}</div>
@@ -615,7 +662,16 @@
         ${campo(l, "veredicto.mensaje", "Mensaje para llevar", { area: true, rows: 2, sub: "Una frase con la idea principal, para la sesión o para el equipo.", extra: `<div data-zona="msg">${msg && !lleno(l.veredicto.mensaje) ? `<div class="sugerida"><span>Propuesta: «${esc(msg)}»</span> <button type="button" class="link-btn" data-act="usar-mensaje">Usarla</button></div>` : ""}</div>` })}
         ${campo(l, "notas", "Notas", { area: true, rows: 3, opt: true })}
       </div>
-      <div class="note">ℹ La ficha de la lectura en Word, PDF y Excel llegará en una próxima versión.</div>`;
+      <h2 class="sec-t">Ficha de la lectura</h2>
+      <p class="field-sub">Una página para la sesión bibliográfica o el club de lectura: la pregunta, cada respuesta, los resultados, el semáforo y la decisión.</p>
+      ${btnDocs(`#/lectura/${l.id}/7`)}
+      ${modoEjemplo ? "" : sesionesDeLecturaHtml(l)}`;
+  }
+  function sesionesDeLecturaHtml(l) {
+    const en = datos.sesiones.filter(x => x.lecturas.includes(l.id)), otras = datos.sesiones.filter(x => !x.lecturas.includes(l.id));
+    return `<div class="card"><h2 class="sub-h">Sesión bibliográfica</h2>
+      ${en.length ? `<p class="field-sub">Forma parte de: ${en.map(x => `<a href="#/sesion/${x.id}">${esc(x.titulo || "Sesión sin título")}</a>`).join(", ")}.</p>` : `<p class="field-sub">Junta esta lectura con otras sobre la misma pregunta para sacar una conclusión conjunta.</p>`}
+      <div class="toolbar">${otras.length ? `<select class="txt-in" id="ses-de-lec" aria-label="Sesión">${otras.map(x => `<option value="${x.id}">${esc(L.corto(x.titulo || "Sesión sin título", 60))}</option>`).join("")}</select><button type="button" class="btn" data-act="lec-a-ses">Añadir a esta sesión</button>` : ""}<button type="button" class="btn" data-act="lec-nueva-ses">+ Nueva sesión con esta lectura</button></div></div>`;
   }
   const propuestaHtml = prop => prop.decision ? `<div class="propuesta propuesta--${prop.decision}"><span>Propuesta de la app</span><b>${esc(L.DECISIONES[prop.decision].nom)}</b><p>${esc(prop.motivo)}</p></div>` : `<div class="propuesta"><span>Propuesta de la app</span><p>${esc(prop.motivo)}</p></div>`;
   function semCard(l, b) {
@@ -639,6 +695,7 @@
       pasos: () => pasosInner(l, n),
       avisos: () => L.avisos(l, n).map(avisoHtml).join(""),
       sugerida: () => sugeridaHtml(l, L.preguntaSugerida(l)),
+      pubmed: () => pubmedHtml(l),
       sembloque: () => bloque ? semBloqueHtml(l, bloque) : "",
       propuesta: () => propuestaHtml(L.decisionPropuesta(l)),
       msg: () => { const m = L.mensajeSugerido(l); return m && !lleno(l.veredicto.mensaje) ? `<div class="sugerida"><span>Propuesta: «${esc(m)}»</span> <button type="button" class="link-btn" data-act="usar-mensaje">Usarla</button></div>` : ""; }
@@ -695,7 +752,7 @@
         <h1 class="page-title">Las plantillas</h1>
         <p class="page-lead">Una por tipo de estudio, con las tres preguntas de la lectura crítica: ¿es válido?, ¿qué dice? y ¿me sirve?</p>
         ${idea("Las preguntas y las pistas son <b>propias</b>: siguen los criterios de las plantillas de <b>CASPe</b>, que puedes descargar gratis en su web e imprimir para contestarlas a lápiz.")}
-        <div class="cuadro-lista">${PL.PLANTILLAS.map(p => { const qs = L.preguntasDe(p); return `<div class="item-card"><a class="item-main" href="#/plantillas/${p.id}"><b class="item-t">${esc(p.nombre)}</b><span class="item-s">${esc(p.que)}</span><span class="badges"><span class="badge">${qs.length} preguntas</span><span class="badge badge--elim">${qs.filter(q => q.elim).length} de eliminación</span></span></a></div>`; }).join("")}</div>
+        <div class="cuadro-lista">${PL.PLANTILLAS.map(p => { const qs = L.preguntasDe(p); return `<div class="item-card"><a class="item-main" href="#/plantillas/${p.id}"><b class="item-t">${esc(p.nombre)}</b><span class="item-s">${esc(p.que)}</span><span class="badges"><span class="badge">${qs.length} preguntas</span><span class="badge badge--elim">${qs.filter(q => q.elim).length} de eliminación</span>${p.propia ? `<span class="badge">Plantilla propia</span>` : ""}</span></a></div>`; }).join("")}</div>
         <p class="cita-pl"><a href="${PL.URL_CASPE}" target="_blank" rel="noopener">Plantillas originales de CASPe ↗</a></p>`;
       return;
     }
@@ -703,10 +760,415 @@
       ${volver("#/plantillas", "Las plantillas")}
       <h1 class="page-title">${esc(pl.nombre)}</h1>
       <p class="page-lead">${esc(pl.que)}</p>
-      <div class="toolbar"><button class="btn btn--primary" data-act="arbol-nueva" data-pl="${pl.id}">Leer un artículo con esta plantilla →</button></div>
+      <div class="toolbar"><button class="btn btn--primary" data-act="arbol-nueva" data-pl="${pl.id}">Leer un artículo con esta plantilla →</button><a class="btn" href="#/plantillas/${pl.id}?informe=1">🖨 Plantilla en blanco (PDF)</a><button class="btn" data-act="doc-word-ir" data-href="#/plantillas/${pl.id}">⬇ En blanco (Word)</button></div>
       ${pl.bloques.map(b => `<h2 class="sec-t">${esc(PL.BLOQUES[b.id].titulo)} <span class="sec-sub">${esc(PL.BLOQUES[b.id].sub)}</span></h2>
         <ol class="pl-lista">${L.preguntasDe(pl, b.id).map(q => `<li value="${L.numeroDe(pl, q.id)}"><b>${esc(q.texto)}</b>${q.elim ? ` <span class="badge badge--elim">De eliminación</span>` : ""}${q.resp === "abierta" ? ` <span class="badge">Abierta</span>` : q.resp === "sn" ? ` <span class="badge">Sí / No</span>` : ""}<ul>${q.pistas.map(p => `<li>${esc(p)}</li>`).join("")}</ul></li>`).join("")}</ol>`).join("")}
-      <div class="box box--ejemplo"><span class="box-tag">Fuente</span><p>${esc(pl.cita)}</p><p><a href="${esc(pl.url)}" target="_blank" rel="noopener">Ver la plantilla original de CASPe ↗</a></p></div>`;
+      <div class="box box--ejemplo"><span class="box-tag">Fuente</span><p>${esc(pl.cita)}</p><p><a href="${esc(pl.url)}" target="_blank" rel="noopener">${pl.propia ? "SQUIRE 2.0 ↗" : "Ver la plantilla original de CASPe ↗"}</a></p></div>`;
+  }
+
+  // ---------- Documentos: bloques → HTML (vista previa, imprimir y PDF) y → Word ----------
+  const escMl = s => esc(s).replace(/\n/g, "<br>");
+  let docActual = "";
+  function bloquesHtml(bloques) {
+    const celda = (c, cab) => { const o = c !== null && typeof c === "object" ? c : { texto: c }; const st = o.fondo ? ` style="background:#${o.fondo};color:#111"` : ""; const cl = [o.centro ? "c" : "", o.negrita ? "b" : ""].filter(Boolean).join(" "); return `<${cab ? "th" : "td"}${cl ? ` class="${cl}"` : ""}${st}>${escMl(o.texto)}</${cab ? "th" : "td"}>`; };
+    return bloques.map(b => {
+      if (b.t === "portada") return `<div class="doc-portada"><h1>${esc(b.titulo)}</h1>${b.sub ? `<p class="doc-sub">${esc(b.sub)}</p>` : ""}${(b.extra || []).map(x => `<p>${esc(x)}</p>`).join("")}</div>`;
+      if (b.t === "h1") return `<h2 class="doc-h1">${esc(b.texto)}</h2>`;
+      if (b.t === "h2") return `<h3 class="doc-h2">${esc(b.texto)}</h3>`;
+      if (b.t === "p") return `<p class="doc-p${b.estilo === "nota" ? " doc-nota" : ""}">${b.runs ? b.runs.map(r => r.negrita ? `<b>${escMl(r.texto)}</b>` : escMl(r.texto)).join("") : escMl(b.texto)}</p>`;
+      if (b.t === "lista") return `<ul class="doc-ul">${b.items.map(i => `<li>${esc(typeof i === "string" ? i : i.texto)}</li>`).join("")}</ul>`;
+      if (b.t === "salto") return `<div class="doc-salto"></div>`;
+      if (b.t === "html") return b.html;   // solo en la vista previa y el PDF (el Word lo ignora)
+      if (b.t === "tabla") {
+        const suma = (b.anchos || []).reduce((a, x) => a + x, 0);
+        const cols = b.anchos ? `<colgroup>${b.anchos.map(w => `<col style="width:${(w / suma * 100).toFixed(1)}%">`).join("")}</colgroup>` : "";
+        return `<div class="table-wrap"><table class="doc-t${b.fuente && b.fuente < 9 ? " doc-t--peq" : ""}">${cols}${b.cab && !b.sinCab ? `<thead><tr>${b.cab.map(c => celda(c, true)).join("")}</tr></thead>` : ""}<tbody>${b.filas.map(f => `<tr>${f.map(c => celda(c, false)).join("")}</tr>`).join("")}</tbody></table></div>`;
+      }
+      return "";
+    }).join("");
+  }
+  function informePie() {
+    return `<footer class="print-foot print-only">
+      <span class="autor-titulo">Aplicación desarrollada por</span>
+      <span class="autor"><b>Carlos J. Galán Doval</b> · Médico de Familia · Técnico en Calidad y Seguridad del Paciente</span>
+      <span class="autor"><b>Rafael J. Romero de Castilla Gil</b> · Médico de Familia · Responsable del Área de Calidad y Seguridad del Paciente</span>
+      <span class="autor-area">Área de Gestión Sanitaria Sur de Córdoba · Andalucía</span>
+      <span class="autor-uso">De libre uso con fines docentes y divulgativos. No sustituye el criterio profesional.</span>
+      <span class="footer-version">Lectura Crítica · versión ${APP_VERSION}</span>
+    </footer>`;
+  }
+  // Documento que toca según la ruta: { doc, base (nombre del archivo) }
+  function docDeRuta() {
+    const fecha = new Date().toLocaleDateString("es-ES"), [ruta] = location.hash.replace(/^#\/?/, "").split("?"), p = ruta.split("/");
+    if (p[0] === "lectura") {
+      const l = buscaLectura(p[1]) || borradores.get(p[1]); if (!l) return null;
+      const doc = L.documentoFicha(l, fecha);
+      // Gráficos de las calculadoras (solo en la vista previa y el PDF), antes del veredicto
+      const graf = l.calculos.map(c => { const r = L.resultadoCalculo(c); if (!r.ok) return ""; if (c.tipo === "tratamiento") return `<h3 class="doc-h2">${esc(c.nombre ? "De cada 100 personas: " + c.nombre : "De cada 100 personas")}</h3>${pictograma(r)}`; if (c.tipo === "diagnostico" || c.tipo === "bayes") return `<h3 class="doc-h2">Nomograma de Fagan</h3>${faganSvg(r.pre, [{ lr: r.lrp.v, et: "Positivo", c: "pos" }, { lr: r.lrn.v, et: "Negativo", c: "neg" }], CA.prob(c.entrada.umbral))}`; return ""; }).join("");
+      if (graf) { const i = doc.bloques.findIndex(b => b.t === "h1" && /Veredicto/.test(b.texto)); doc.bloques.splice(i < 0 ? doc.bloques.length : i, 0, { t: "html", html: `<div class="doc-graf">${graf}</div>` }); }
+      return { doc, base: "Lectura crítica " + (nombreLectura(l) || "").slice(0, 60) };
+    }
+    if (p[0] === "sesion") { const s = buscaSesion(p[1]); return s ? { doc: L.documentoSesion(s, datos.lecturas, fecha), base: "Sesión " + (s.titulo || "").slice(0, 60) } : null; }
+    if (p[0] === "plantillas") { const pl = L.plantilla(p[1]); return pl ? { doc: L.documentoPlantilla(pl), base: "Plantilla " + pl.nombre } : null; }
+    return null;
+  }
+  function renderDoc() {
+    const d = docDeRuta();
+    if (!d) { noEncontrado("ese documento", "#/", "Ir al inicio"); return; }
+    view.innerHTML = `<div class="informe-bar informe-only"><button class="btn" data-act="volver">← Volver</button><span class="informe-acc"><button class="btn" data-act="doc-word">⬇ Word</button><button class="btn btn--primary" data-act="imprimir">Guardar / imprimir</button></span></div>
+      <div class="doc-prev doc-prev--informe">${bloquesHtml(d.doc.bloques)}</div>${informePie()}`;
+  }
+  const fechaArchivo = () => new Date().toLocaleDateString("es-ES").replace(/\//g, "-");
+  const nombreArchivoDe = (base, ext) => `${String(base || "Lectura crítica").replace(/[\\/:*?"<>|%]/g, "").trim()} ${fechaArchivo()}.${ext}`;
+  function nombreArchivo(ext) { const d = docDeRuta(); return nombreArchivoDe(d ? d.base : "Lectura crítica", ext); }
+  function compartirOBajar(blob, nombre, msg) {
+    const file = new File([blob], nombre, { type: blob.type });
+    if (esIOS() && navigator.canShare && navigator.canShare({ files: [file] })) navigator.share({ files: [file], title: nombre }).catch(() => {});
+    else { descargar(blob, nombre); toast(msg, 3000); }
+  }
+  function descargarWord() {
+    try {
+      const d = docDeRuta(); if (!d) return;
+      const bytes = window.Docx.construirDocx(Object.assign({ pie: d.doc.titulo + " · Generado con la app Lectura Crítica" }, d.doc));
+      compartirOBajar(new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }), nombreArchivoDe(d.base, "docx"), "Word descargado. Ábrelo con Word, Pages o LibreOffice y ajústalo a tu gusto.");
+    } catch (e) { toast("No se ha podido crear el Word.", 4000); }
+  }
+  function exportarExcel() {
+    try {
+      const bytes = window.Xlsx.construirLibroXlsx(L.hojasExcel(datosUsuario.lecturas, datosUsuario.sesiones, new Date().toLocaleDateString("es-ES")));
+      compartirOBajar(new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), nombreArchivoDe("Lectura crítica mis lecturas", "xlsx"), "Excel descargado.");
+    } catch (e) { toast("No se ha podido crear el Excel.", 4000); }
+  }
+  const btnDocs = (href, conWord = true) => `<div class="toolbar">${conWord ? `<button class="btn btn--primary" data-act="doc-word-ir" data-href="${href}">⬇ Word</button>` : ""}<a class="btn" href="${href}?informe=1">Ver / PDF</a></div>`;
+
+  // ---------- PDF en iOS (sin librerías; mismo método que Auditorías y AMFE) ----------
+  // En iOS, window.print() no hace nada cuando la app está instalada en la pantalla de inicio.
+  function pdfDesdeJPEGs(paginas, wPt, hPt) {
+    const enc = new TextEncoder(), partes = [], offs = []; let pos = 0;
+    const push = x => { const b = typeof x === "string" ? enc.encode(x) : x; partes.push(b); pos += b.length; };
+    const obj = (n, cuerpo) => { offs[n] = pos; push(`${n} 0 obj\n`); cuerpo(); push("\nendobj\n"); };
+    push("%PDF-1.4\n"); push(new Uint8Array([37, 226, 227, 207, 211, 10]));
+    const n = paginas.length;
+    obj(1, () => push("<< /Type /Catalog /Pages 2 0 R >>"));
+    obj(2, () => push(`<< /Type /Pages /Kids [${paginas.map((_, i) => `${3 + i * 3} 0 R`).join(" ")}] /Count ${n} >>`));
+    paginas.forEach((p, i) => {
+      const pg = 3 + i * 3, cont = pg + 1, img = pg + 2, flujo = `q ${wPt} 0 0 ${hPt} 0 0 cm /Im${i} Do Q`;
+      obj(pg, () => push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${wPt} ${hPt}] /Resources << /XObject << /Im${i} ${img} 0 R >> >> /Contents ${cont} 0 R >>`));
+      obj(cont, () => { push(`<< /Length ${flujo.length} >>\nstream\n${flujo}\nendstream`); });
+      obj(img, () => { push(`<< /Type /XObject /Subtype /Image /Width ${p.w} /Height ${p.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.bytes.length} >>\nstream\n`); push(p.bytes); push("\nendstream"); });
+    });
+    const total = 3 + n * 3, xref = pos;
+    let x = `xref\n0 ${total}\n0000000000 65535 f \n`;
+    for (let k = 1; k < total; k++) x += String(offs[k]).padStart(10, "0") + " 00000 n \n";
+    push(x + `trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+    return new Blob(partes, { type: "application/pdf" });
+  }
+  async function generarPDF() {
+    const ANCHO = 720, K = 2;
+    const A4W = 595.28, A4H = 841.89, MARGEN_PT = 34;
+    const PX = (A4W - 2 * MARGEN_PT) / ANCHO;
+    const PW = A4W / PX, PH = A4H / PX, M = MARGEN_PT / PX, ALTO_UTIL = PH - 2 * M;
+    const hoja = document.createElement("div");
+    hoja.className = "view";
+    hoja.style.cssText = `position:absolute;left:-20000px;top:0;width:${ANCHO}px;max-width:none;margin:0;padding:0;box-shadow:none;`;
+    hoja.innerHTML = $("#view").innerHTML;
+    $$(".informe-bar, [id]", hoja).forEach(el => { if (el.classList.contains("informe-bar")) el.remove(); else el.removeAttribute("id"); });
+    $$("details", hoja).forEach(d => { d.open = true; });
+    document.body.appendChild(hoja);
+    try {
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const R0 = hoja.getBoundingClientRect();
+      const ops = [], cortes = [0], bloques = [];
+      const SIN_CORTE = ".print-head, .chart-card, tr, .formula, .box, .print-foot, h1, h2, h3, .ficha-cab, .leyenda";
+      const rel = r => ({ x: r.left - R0.left, y: r.top - R0.top, w: r.width, h: r.height });
+      const hayColor = c => !!c && c !== "transparent" && !/rgba\([^)]*,\s*0\)$/.test(c);
+      const LADOS = ["Top", "Right", "Bottom", "Left"];
+      const texto = (n, cs) => {
+        const t = n.textContent, re = /\S+/g, rg = document.createRange(); let m;
+        const font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+        while ((m = re.exec(t))) {
+          rg.setStart(n, m.index); rg.setEnd(n, m.index + m[0].length);
+          const rs = rg.getClientRects(); if (!rs.length) continue;
+          ops.push({ t: "txt", s: cs.textTransform === "uppercase" ? m[0].toUpperCase() : m[0], r: rel(rs[0]), font, col: cs.color, ls: cs.letterSpacing });
+        }
+      };
+      const recorre = el => {
+        const cs = getComputedStyle(el);
+        if (cs.display === "none" || cs.visibility === "hidden") return;
+        const r = rel(el.getBoundingClientRect());
+        if (r.h > 0) cortes.push(r.y + r.h);
+        if (el.matches(SIN_CORTE)) bloques.push([r.y, r.y + r.h]);
+        if (el instanceof SVGSVGElement) { ops.push({ t: "svg", el, r }); return; }
+        const bordes = LADOS.map(l => [parseFloat(cs[`border${l}Width`]) || 0, cs[`border${l}Color`]]);
+        if (hayColor(cs.backgroundColor) || bordes.some(b => b[0] > 0 && hayColor(b[1]))) ops.push({ t: "caja", r, bg: cs.backgroundColor, rad: parseFloat(cs.borderTopLeftRadius) || 0, bordes });
+        if (el.tagName === "LI") {
+          const ol = el.parentElement.tagName === "OL", idx = Array.prototype.indexOf.call(el.parentElement.children, el) + 1;
+          ops.push({ t: "txt", s: ol ? idx + "." : "•", r: { x: r.x - (ol ? 20 : 14), y: r.y, w: 16, h: parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.4 }, font: `normal 700 ${cs.fontSize} ${cs.fontFamily}`, col: ol ? "#9d174d" : cs.color, ls: "normal" });
+        }
+        for (const n of el.childNodes) {
+          if (n.nodeType === 1) recorre(n);
+          else if (n.nodeType === 3 && n.textContent.trim()) texto(n, cs);
+        }
+      };
+      recorre(hoja);
+      for (const op of ops.filter(o => o.t === "svg")) {
+        const cl = op.el.cloneNode(true), orig = [op.el, ...op.el.querySelectorAll("*")], copia = [cl, ...cl.querySelectorAll("*")];
+        orig.forEach((o, i) => { const cs = getComputedStyle(o); copia[i].setAttribute("style", ["fill", "stroke", "stroke-width", "stroke-dasharray", "font-family", "font-size", "font-weight"].map(p => `${p}:${cs.getPropertyValue(p)}`).join(";")); });
+        cl.setAttribute("xmlns", "http://www.w3.org/2000/svg"); cl.setAttribute("width", op.r.w); cl.setAttribute("height", op.r.h);
+        op.img = await new Promise(res => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(cl)); });
+      }
+      const alto = Math.ceil(R0.height);
+      const parte = y => bloques.some(([a, b]) => a < y - 0.5 && y + 0.5 < b && b - a < ALTO_UTIL);
+      const cands = [...new Set(cortes.map(c => Math.ceil(c)))].sort((a, b) => a - b);
+      const pags = []; let y0 = 0;
+      while (y0 < alto - 1) {
+        const lim = y0 + ALTO_UTIL;
+        if (lim >= alto) { pags.push([y0, alto]); break; }
+        const y = cands.filter(c => c > y0 + 80 && c <= lim && !parte(c)).pop() || Math.floor(lim);
+        pags.push([y0, y]); y0 = y;
+      }
+      const ponFuente = (ctx, f) => { ctx.font = "10px serif"; ctx.font = f; if (ctx.font === "10px serif") ctx.font = f.replace(/^(.*?\d+(\.\d+)?px).*$/, "$1 sans-serif"); };
+      const caja = (ctx, op) => {
+        const { x, y, w, h } = op.r, rad = Math.min(op.rad, w / 2, h / 2);
+        const camino = () => { ctx.beginPath(); if (rad > 0 && ctx.roundRect) ctx.roundRect(x, y, w, h, rad); else ctx.rect(x, y, w, h); };
+        if (hayColor(op.bg)) { ctx.fillStyle = op.bg; camino(); ctx.fill(); }
+        const [t, d, b, l] = op.bordes;
+        if (op.bordes.every(z => z[0] === t[0] && z[1] === t[1]) && t[0] > 0 && hayColor(t[1])) { ctx.strokeStyle = t[1]; ctx.lineWidth = t[0]; ctx.beginPath(); if (rad > 0 && ctx.roundRect) ctx.roundRect(x + t[0] / 2, y + t[0] / 2, w - t[0], h - t[0], Math.max(0, rad - t[0] / 2)); else ctx.rect(x + t[0] / 2, y + t[0] / 2, w - t[0], h - t[0]); ctx.stroke(); return; }
+        const lado = (z, rx, ry, rw, rh) => { if (z[0] > 0 && hayColor(z[1])) { ctx.fillStyle = z[1]; ctx.fillRect(rx, ry, rw, rh); } };
+        lado(t, x, y, w, t[0]); lado(b, x, y + h - b[0], w, b[0]); lado(l, x, y, l[0], h); lado(d, x + w - d[0], y, d[0], h);
+      };
+      const dibujaPaginas = conSVG => pags.map(([a, b]) => {
+        const cv = document.createElement("canvas"); cv.width = Math.round(PW * K); cv.height = Math.round(PH * K);
+        const ctx = cv.getContext("2d");
+        ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, cv.width, cv.height);
+        ctx.scale(K, K); ctx.translate(M, M - a);
+        ctx.beginPath(); ctx.rect(-2, a, ANCHO + 4, b - a); ctx.clip();
+        for (const op of ops) {
+          if (op.r.y >= b || op.r.y + op.r.h <= a) continue;
+          if (op.t === "caja") caja(ctx, op);
+          else if (op.t === "svg") { if (conSVG && op.img) ctx.drawImage(op.img, op.r.x, op.r.y, op.r.w, op.r.h); }
+          else {
+            ponFuente(ctx, op.font); ctx.fillStyle = op.col; ctx.textBaseline = "alphabetic";
+            if ("letterSpacing" in ctx) ctx.letterSpacing = op.ls && op.ls !== "normal" ? op.ls : "0px";
+            const mt = ctx.measureText(op.s), asc = mt.fontBoundingBoxAscent || mt.actualBoundingBoxAscent || op.r.h * 0.8, desc = mt.fontBoundingBoxDescent || mt.actualBoundingBoxDescent || op.r.h * 0.2;
+            ctx.fillText(op.s, op.r.x, op.r.y + (op.r.h - (asc + desc)) / 2 + asc);
+          }
+        }
+        const url = cv.toDataURL("image/jpeg", 0.9), bin = atob(url.slice(url.indexOf(",") + 1)), bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return { bytes, w: cv.width, h: cv.height };
+      });
+      let paginas;
+      try { paginas = dibujaPaginas(true); } catch (e) { paginas = dibujaPaginas(false); }
+      return pdfDesdeJPEGs(paginas, A4W, A4H);
+    } finally { hoja.remove(); }
+  }
+  let pdfListo = null;
+  function prepararPDF() {
+    pdfListo = null; const r = location.hash;
+    setTimeout(() => { if (location.hash === r && document.body.classList.contains("ver-informe")) generarPDF().then(b => { pdfListo = { r, blob: b }; }).catch(() => {}); }, 300);
+  }
+  async function guardarPDF() {
+    let blob = pdfListo && pdfListo.r === location.hash ? pdfListo.blob : null;
+    if (!blob) { toast("Preparando el PDF…"); try { blob = await generarPDF(); pdfListo = { r: location.hash, blob }; } catch (e) { toast("No se ha podido crear el PDF.", 4000); return; } }
+    const file = new File([blob], nombreArchivo("pdf"), { type: "application/pdf" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: file.name }); toast(""); }
+      catch (e) { if (e && e.name === "AbortError") { toast(""); return; } toast("PDF listo: pulsa otra vez «Guardar / imprimir».", 4000); }
+      return;
+    }
+    descargar(blob, file.name); toast("PDF descargado.", 3000);
+  }
+  function imprimir() { if (esIOS()) { guardarPDF(); return; } window.print(); }
+  let cerrados = [];
+  window.addEventListener("beforeprint", () => { cerrados = $$("details").filter(d => !d.open); cerrados.forEach(d => { d.open = true; }); });
+  window.addEventListener("afterprint", () => { cerrados.forEach(d => { d.open = false; }); cerrados = []; });
+
+  // ---------- Club de lectura: cada asistente contesta (mejora A) ----------
+  function renderClub(l, n) {
+    actual = l; pasoActual = 0; nAyuda = 0;
+    const pl = L.plantilla(l.plantilla);
+    if (!pl) { view.innerHTML = `${volver(`#/lectura/${l.id}/3`, "Volver a la lectura")}<div class="placeholder-box"><p><b>Elige antes el tipo de estudio.</b></p></div>`; return; }
+    const qs = L.preguntasDe(pl), i = Math.min(Math.max(n || 1, 1), qs.length), q = qs[i - 1], A = l.club.asistentes;
+    const pill = (x, k) => { const v = x.resp === "abierta" ? (L.contestada(l, x) ? "hecha" : "") : L.valor(l, x.id); return `<a href="#/lectura/${l.id}/club?q=${k + 1}" class="club-pill${k + 1 === i ? " actual" : ""} club-pill--${v || "nada"}${x.elim ? " club-pill--elim" : ""}" title="${esc(x.texto)}">${k + 1}</a>`; };
+    const rep = L.reparto(l, q.id), may = L.mayoria(l, q.id), V = l.club.votos[q.id] || {};
+    const barra = rep.total ? `<div class="club-barra" aria-label="Reparto de votos">${["si", "no", "nose"].filter(k => rep[k]).map(k => `<span class="club-b club-b--${k}" style="flex:${rep[k]}">${L.RESPUESTAS[k]} · ${rep[k]}</span>`).join("")}</div>` : `<p class="field-sub">Todavía no ha votado nadie.</p>`;
+    view.innerHTML = `
+      <div class="club-top no-print">${volver(`#/lectura/${l.id}/${L.BLOQUE_PASO[q.bloque]}`, "Volver a la lectura")}<button type="button" class="btn btn--ghost" data-act="proyector">${document.body.classList.contains("modo-proyector") ? "Salir del modo proyector" : "📽 Modo proyector"}</button></div>
+      <h1 class="page-title">Club de lectura</h1>
+      <p class="page-lead">${esc(L.corto(nombreLectura(l) || "Lectura", 90))} · ${esc(pl.nombre)}. Cada asistente contesta; después, el grupo decide la respuesta.</p>
+      <details class="card club-asist"${A.length ? "" : " open"}><summary><b>Asistentes (${A.length})</b></summary>
+        <p class="field-sub">Basta con el perfil o las iniciales. No hace falta el nombre completo.</p>
+        <div class="club-asis">${A.map(a => `<span class="club-a"><input class="txt-in" data-as="${a.id}" value="${esc(a.nombre)}" placeholder="Perfil o iniciales" aria-label="Asistente" autocomplete="off" /><button type="button" class="icon-btn icon-btn--mini" data-act="as-del" data-id="${a.id}" aria-label="Quitar">✕</button></span>`).join("")}</div>
+        <button type="button" class="btn btn--ghost" data-act="as-nuevo">+ Añadir asistente</button></details>
+      <div class="club-pills no-print" aria-label="Preguntas">${qs.map(pill).join("")}</div>
+      <article class="card club-q">
+        <span class="wiz-paso">Pregunta ${L.numeroDe(pl, q.id)} de ${qs.length} · ${esc(PL.BLOQUES[q.bloque].titulo)}${q.elim ? " · de eliminación" : ""}</span>
+        <h2>${esc(q.texto)}</h2>
+        <details class="pistas"><summary>Pistas</summary><ul>${q.pistas.map(x => `<li>${esc(x)}</li>`).join("")}</ul></details>
+        ${q.resp === "abierta" ? `${L.calculosDe(l, q).map(c => L.textoCalculo(c)).filter(lleno).map(x => `<p class="llano">${esc(x)}</p>`).join("")}
+          <label class="nota-lbl" for="club-nota">Resultado</label><textarea class="txt-in" id="club-nota" data-q="${q.id}" data-f="nota" rows="3">${esc(L.resp(l, q.id).nota)}</textarea>`
+        : `${A.length ? `<div class="club-votos">${A.map(a => `<div class="club-fila"><span>${esc(a.nombre || "Sin nombre")}</span>${segResp(`data-act="voto" data-q="${q.id}" data-a="${a.id}"`, V[a.id], q.resp === "sn" ? [["si", "Sí"], ["no", "No"]] : [["si", "Sí"], ["no", "No"], ["nose", "NS"]])}</div>`).join("")}</div>` : `<div class="note">ℹ Añade los asistentes para que cada uno vote.</div>`}
+          ${barra}
+          ${L.discrepancia(l, q.id) ? `<div class="warn">⚠ Hay votos de «Sí» y de «No»: habladlo antes de decidir la respuesta del grupo.</div>` : ""}
+          <h3 class="sub-h">Respuesta del grupo</h3>
+          ${segResp(`data-act="resp" data-q="${q.id}"`, L.valor(l, q.id), q.resp === "sn" ? [["si", "Sí"], ["no", "No"]] : undefined)}
+          ${may && may !== L.valor(l, q.id) ? `<div class="toolbar"><button type="button" class="btn" data-act="usar-mayoria" data-q="${q.id}" data-v="${may}">Usar la mayoría: ${esc(L.RESPUESTAS[may])}</button></div>` : ""}`}
+      </article>
+      ${q.elim && L.eliminacion(l).estado === "falla" ? `<div class="aviso-error">✕ El estudio no supera las preguntas de eliminación: no merece la pena seguir.</div>` : ""}
+      <div class="wiz-nav no-print">${i > 1 ? `<a class="btn" href="#/lectura/${l.id}/club?q=${i - 1}">← Anterior</a>` : "<span></span>"}${i < qs.length ? `<a class="btn btn--primary" href="#/lectura/${l.id}/club?q=${i + 1}">Siguiente →</a>` : `<a class="btn btn--primary" href="#/lectura/${l.id}/7">Al veredicto →</a>`}</div>`;
+  }
+
+  // ---------- Sesiones (mejora G) ----------
+  let actualSesion = null;
+  function renderSesion(s) {
+    actualSesion = s; actual = null; nAyuda = 0;
+    const L_ = L.lecturasDeSesion(s, datos.lecturas), resto = datos.lecturas.filter(l => !s.lecturas.includes(l.id));
+    const fila = l => { const pl = L.plantilla(l.plantilla), rc = L.resultadoClave(l); return `<div class="ses-fila">
+      <a href="#/lectura/${l.id}"><b>${esc(L.corto(nombreLectura(l) || "Lectura sin título", 110))}</b></a>
+      <span class="badges">${decisionBadge(l.veredicto.decision)}${pl ? `<span class="badge">${esc(pl.nombre)}</span><span class="badge badge--luces" title="Validez · Resultados · Me sirve">${["validez", "resultados", "aplicabilidad"].map(b => luz(L.semaforo(l, b).color)).join("")}</span>` : l.filtro.responde === "no" ? `<span class="badge">Descartado en el filtro</span>` : ""}</span>
+      ${rc ? `<span class="ses-rc">${esc(rc.texto)}</span>` : ""}
+      ${modoEjemplo ? "" : `<button type="button" class="link-btn link-btn--peligro" data-act="ses-quitar" data-id="${l.id}">Quitar de la sesión</button>`}</div>`; };
+    view.innerHTML = `
+      ${volver(modoEjemplo ? "#/ejemplos" : "#/lecturas", modoEjemplo ? "Ejemplos" : "Mis lecturas")}
+      <h1 class="page-title">${esc(s.titulo || "Sesión bibliográfica")}</h1>
+      <p class="page-lead">Varias lecturas sobre la misma pregunta y una conclusión conjunta.</p>
+      <div class="card">
+        ${campo(s, "titulo", "Título de la sesión", { bind: 'data-sk="titulo"', ph: "Por ejemplo, escalas de alerta en la sala de espera" })}
+        ${campo(s, "pregunta", "La pregunta", { bind: 'data-sk="pregunta"', area: true, rows: 2, ph: "En [pacientes], ¿[intervención], frente a [comparación], mejora [resultado]?" })}
+        <div class="dos-col">${campo(s, "unidad", "Unidad o servicio", { bind: 'data-sk="unidad"', opt: true })}${campo(s, "fecha", "Fecha", { bind: 'data-sk="fecha"', tipo: "date" })}</div>
+      </div>
+      <h2 class="sec-t">Los artículos (${L_.length})</h2>
+      ${L_.length ? `<div class="ses-lista">${L_.map(fila).join("")}</div>` : `<div class="placeholder-box"><p>Todavía no hay artículos en esta sesión.</p></div>`}
+      ${modoEjemplo ? "" : `<div class="card ses-anadir">
+        <button type="button" class="btn btn--primary" data-act="ses-leer">+ Leer un artículo nuevo para esta sesión</button>
+        ${resto.length ? `<div class="guardar-en"><select class="txt-in" id="ses-otra" aria-label="Lectura">${resto.map(l => `<option value="${l.id}">${esc(L.corto(nombreLectura(l) || "Lectura sin título", 70))}</option>`).join("")}</select><button type="button" class="btn" data-act="ses-anadir">Añadir una lectura que ya tengo</button></div>` : ""}
+      </div>`}
+      <h2 class="sec-t">Conclusión de la sesión</h2>
+      <div class="card">
+        <div class="decisiones">${Object.entries(L.DECISIONES).map(([k, x]) => `<button type="button" class="dec-card dec-card--${k}${s.decision === k ? " active" : ""}" data-act="ses-dec" data-v="${k}" aria-pressed="${s.decision === k}"><b>${x.nom}</b><span>${esc(x.txt)}</span></button>`).join("")}</div>
+        ${campo(s, "conclusion", "Conclusión", { bind: 'data-sk="conclusion"', area: true, rows: 4, ph: "Qué decidimos, por qué y qué haremos (quién, qué, cuándo)" })}
+      </div>
+      <h2 class="sec-t">Ficha de la sesión</h2>
+      <p class="field-sub">Una tabla con todos los artículos, su semáforo, su resultado clave y su decisión, y la conclusión.</p>
+      ${btnDocs(`#/sesion/${s.id}`)}`;
+  }
+
+  // ---------- Aprende ----------
+  function renderAprende(n) {
+    const T = C.TEMAS, t = T.find(x => x.n === n);
+    if (!t) {
+      view.innerHTML = `
+        <h1 class="page-title">Aprende</h1>
+        <p class="page-lead">${T.length} temas cortos, explicados fácil, para tener a mano mientras lees un artículo.</p>
+        <div class="temas">${T.map(x => `<a class="tema-card pdca--${x.c}" href="#/aprende/${x.n}"><span class="tema-n">${x.n}</span><span><b>${x.titulo}</b><span>${x.sub}</span></span></a>`).join("")}</div>
+        ${practica("El método de lectura (pregunta PICO, filtro de dos minutos, tres preguntas y decisión) es el del capítulo «Leer un artículo en diez minutos» de la <i>Guía de Calidad y Seguridad del Paciente</i> de los autores, en preparación.")}`;
+      return;
+    }
+    const prev = T.find(x => x.n === n - 1), next = T.find(x => x.n === n + 1);
+    view.innerHTML = `
+      <div class="wiz-top no-print">${volver("#/aprende", "Aprende")}<div class="tema-pills tema-pills--wrap">${T.map(x => `<a href="#/aprende/${x.n}" class="pdca--${x.c}${x.n === n ? " actual" : ""}">${x.n}</a>`).join("")}</div></div>
+      <div class="wiz-titulo"><span class="wiz-paso">Tema ${n} de ${T.length}</span><h1 class="page-title">${t.titulo}</h1><p class="page-lead">${t.sub}</p></div>
+      <div class="card minuto pdca--${t.c}"><h2 class="sub-h">En un minuto</h2><ul>${t.minuto.map(x => `<li>${x}</li>`).join("")}</ul></div>
+      ${t.secciones.map((x, i) => `<details class="facil"${i === 0 ? " open" : ""}><summary>${x.t}</summary><div class="facil-body">${x.h}</div></details>`).join("")}
+      ${box("ejemplo", "Minicaso", t.minicaso)}
+      <div class="toolbar"><a class="btn" href="#/prueba/${PRUEBA_DE_TEMA[t.n] || ""}">✓ Ponte a prueba</a><a class="btn btn--primary" href="${t.practica.href}">${t.practica.texto} →</a></div>
+      <div class="wiz-nav no-print">${prev ? `<a class="btn" href="#/aprende/${prev.n}">← ${prev.titulo}</a>` : "<span></span>"}${next ? `<a class="btn" href="#/aprende/${next.n}">${next.titulo} →</a>` : "<span></span>"}</div>`;
+  }
+
+  // ---------- Ponte a prueba ----------
+  const PRUEBA_DE_TEMA = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: "tipo", 10: "calcula" };
+  const respuestasQuiz = {}, respTipo = {}, respCalc = {};
+  // Orden de las opciones barajado pero estable (para que la correcta no esté siempre en el mismo sitio)
+  const barajar = (n, semilla) => { const a = Array.from({ length: n }, (_, i) => i); let s = semilla * 9301 + 49297; for (let i = n - 1; i > 0; i--) { s = (s * 9301 + 49297) % 233280; const j = Math.floor(s / 233280 * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const pillsPrueba = act => `<div class="tema-pills tema-pills--wrap prueba-pills no-print"><a href="#/prueba" class="pdca--P${!act ? " actual" : ""}" title="Todas las preguntas">T</a>${Object.keys(C.TEMAS_TEST).map(k => `<a href="#/prueba/${k}" class="pdca--P${String(act) === k ? " actual" : ""}" title="${esc(C.TEMAS_TEST[k].nom)}">${k}</a>`).join("")}<a href="#/prueba/tipo" class="pdca--H${act === "tipo" ? " actual" : ""}" title="¿Qué tipo de estudio es?">?</a><a href="#/prueba/calcula" class="pdca--V${act === "calcula" ? " actual" : ""}" title="Calcula">=</a></div>`;
+  function renderPrueba(tema) {
+    if (tema === "tipo") { renderEjTipo(); return; }
+    if (tema === "calcula") { renderEjCalc(); return; }
+    const Q = C.TEST.map((q, i) => Object.assign({ i }, q)).filter(q => !tema || q.t === tema);
+    const hechas = Q.filter(q => q.i in respuestasQuiz), bien = hechas.filter(q => respuestasQuiz[q.i] === q.ok).length;
+    view.innerHTML = `
+      <h1 class="page-title">Ponte a prueba</h1>
+      <p class="page-lead">${C.TEST.length} preguntas${tema ? ` (aquí, las de «${esc(C.TEMAS_TEST[tema].nom)}»)` : ""}. Toca la respuesta que creas correcta y lee la explicación. En <b>?</b>, adivina el tipo de estudio; en <b>=</b>, calcula.</p>
+      ${pillsPrueba(tema)}
+      <div class="marcador">${hechas.length ? `<span><b>${bien}</b> aciertos de ${hechas.length} respondidas (de ${Q.length})</span>${hechas.length === Q.length ? `<span class="sem-b sem-b--${bien / Q.length >= 0.8 ? "verde" : bien / Q.length >= 0.6 ? "ambar" : "rojo"}">${bien / Q.length >= 0.8 ? "¡Muy bien!" : bien / Q.length >= 0.6 ? "Bien: repasa los fallos" : "Repasa «Aprende»"}</span>` : ""}` : `<span class="field-sub">Aciertos: 0 de ${Q.length}</span>`}</div>
+      <div class="card">${Q.map(q => { const ord = barajar(q.o.length, q.i + 1), r = respuestasQuiz[q.i]; return `<div class="quiz-q">
+        <p><span class="badge">${esc(C.TEMAS_TEST[q.t].nom)}</span> <b>${esc(q.q)}</b></p>
+        ${ord.map(j => `<button type="button" class="quiz-o${r != null ? (j === q.ok ? " quiz-o--ok" : j === r ? " quiz-o--mal" : "") : ""}" data-act="quiz" data-q="${q.i}" data-o="${j}">${esc(q.o[j])}</button>`).join("")}
+        ${r != null ? `<p class="quiz-fb">${r === q.ok ? "<b>¡Correcto!</b> " : "<b>No.</b> "}${esc(q.e)} <a href="#/aprende/${C.TEMAS_TEST[q.t].aprende}">Repasar en «Aprende»</a></p>` : ""}
+      </div>`; }).join("")}</div>
+      <div class="toolbar no-print"><button type="button" class="btn" data-act="quiz-reset">Empezar de nuevo</button><a class="btn btn--primary" href="#/prueba/tipo">¿Qué tipo de estudio es? →</a></div>`;
+  }
+  function renderEjTipo() {
+    const E = C.EJ_TIPO, bien = E.filter((x, i) => respTipo[i] === x.ok).length, hechas = Object.keys(respTipo).length;
+    view.innerHTML = `
+      <h1 class="page-title">¿Qué tipo de estudio es?</h1>
+      <p class="page-lead">Resúmenes cortos inventados. Elige el tipo de estudio de cada uno. ${hechas ? `<b>${bien} de ${hechas}</b> bien.` : ""}</p>
+      ${pillsPrueba("tipo")}
+      <div class="card">${E.map((x, i) => { const r = respTipo[i]; return `<div class="quiz-q">
+        <p><b>«${esc(x.texto)}»</b></p>
+        <div class="ej-tipos">${PL.PLANTILLAS.map(p => `<button type="button" class="chip${r === p.id ? (p.id === x.ok ? " chip--ok" : " chip--mal") : r && p.id === x.ok ? " chip--ok" : ""}" data-act="ej-tipo" data-i="${i}" data-v="${p.id}">${esc(p.corto)}</button>`).join("")}</div>
+        ${r ? `<p class="quiz-fb">${r === x.ok ? "<b>¡Correcto!</b> " : "<b>No.</b> "}${esc(x.e)}</p>` : ""}
+      </div>`; }).join("")}</div>
+      <div class="toolbar no-print"><button type="button" class="btn" data-act="ej-tipo-reset">Empezar de nuevo</button><a class="btn btn--primary" href="#/prueba/calcula">Calcula →</a></div>`;
+  }
+  function renderEjCalc() {
+    view.innerHTML = `
+      <h1 class="page-title">Calcula</h1>
+      <p class="page-lead">Con papel y lápiz (o de cabeza). Escribe tu resultado y compruébalo.</p>
+      ${pillsPrueba("calcula")}
+      <div class="card">${C.EJ_CALC.map((x, i) => { const r = respCalc[i] || {}, v = CA.num(r.v), okv = r.ver && Math.abs(v - x.ok) <= x.tol; return `<div class="quiz-q">
+        <p><b>${esc(x.texto)}</b></p>
+        <div class="ej-calc"><input class="txt-in calc-in" data-ejc="${i}" value="${esc(r.v || "")}" inputmode="decimal" aria-label="Tu resultado" autocomplete="off" /><button type="button" class="btn" data-act="ej-calc" data-i="${i}">Comprobar</button></div>
+        ${r.ver ? `<p class="quiz-fb">${okv ? "<b>¡Correcto!</b> " : `<b>No.</b> La respuesta es ${esc(CA.fmt(x.ok, 2))}. `}${esc(x.e)}</p>` : ""}
+      </div>`; }).join("")}</div>
+      <div class="toolbar no-print"><a class="btn" href="#/calc">Abrir las calculadoras</a><a class="btn" href="#/prueba">← Preguntas del test</a></div>`;
+  }
+
+  // ---------- Glosario ----------
+  function renderGlosario() {
+    view.innerHTML = `<h1 class="page-title">Glosario</h1><p class="page-lead">${C.GLOSARIO.length} términos en lenguaje llano.</p>
+      <div class="input-wrap glos-buscar"><input id="glos-q" type="search" placeholder="Buscar término…" autocomplete="off" /></div>
+      <dl class="glos-lista" id="glos-lista"></dl>`;
+    const pinta = q => {
+      const t = L.sinTildes(q);
+      const l = C.GLOSARIO.filter(([a, b]) => !t || L.sinTildes(a + " " + b).includes(t)).sort((x, y) => x[0].localeCompare(y[0], "es"));
+      $("#glos-lista").innerHTML = l.length ? l.map(([a, b]) => `<div class="glos-item"><dt>${esc(a)}</dt><dd>${esc(b)}</dd></div>`).join("") : `<p class="placeholder-box">Sin resultados.</p>`;
+    };
+    pinta(""); $("#glos-q").addEventListener("input", e => pinta(e.target.value));
+  }
+
+  // ---------- Ejemplos ----------
+  function renderEjemplos() {
+    const E = ejemplos(), S = E.sesiones[0], U = L.lecturasDeSesion(S, E.lecturas);
+    view.innerHTML = `
+      <h1 class="page-title">Ejemplos</h1>
+      <p class="page-lead">Para ver cómo queda una lectura antes de hacer la tuya. Están aparte: puedes tocarlos, pero <b>no se guardan ni se mezclan con tus datos</b>. Si te sirve de punto de partida, pulsa «Copiar a mis datos».</p>
+      <h2 class="sec-t">Ejemplo completo: la sala de espera de Urgencias</h2>
+      <p class="field-sub">Tras el análisis de un caso de sepsis, el equipo de Urgencias se pregunta si una escala de alerta temprana en la sala de espera reduce los empeoramientos no detectados. Encuentran seis artículos: tres se descartan en el filtro de dos minutos y se leen una revisión, un ensayo, un estudio cualitativo y la validación de la escala. <b>Todo es ficticio</b>: la escala «EAT» no existe.</p>
+      <a class="ej-card ej-card--sesion" href="#/sesion/${S.id}"><b>${esc(S.titulo)}</b><span>La sesión completa: los siete artículos, su semáforo, su resultado clave y la conclusión del equipo.</span></a>
+      <div class="ej-grid">${U.map(l => { const pl = L.plantilla(l.plantilla); return `<a class="ej-card" href="#/lectura/${l.id}"><b>${esc(L.corto(l.titulo.replace(/ \(ficticio\)$/, ""), 80))}</b><span>${pl ? esc(pl.nombre) : "Descartado en el filtro"} · ${esc(l.veredicto.decision ? L.DECISIONES[l.veredicto.decision].nom : "")}</span></a>`; }).join("")}</div>
+      <h2 class="sec-t">Minicasos</h2>
+      <p class="field-sub">Artículos cortos e inventados para practicar una cosa. Cada uno se abre en el paso que trabaja.</p>
+      <div class="ej-grid ej-grid--mini">${C.EJEMPLOS.minicasos.map(m => `<a class="ej-card" href="#/lectura/${m.id}/${m.paso}"><b>${esc(m.que)}</b><span>${esc(L.corto(m.titulo.replace(/ \(ficticio\)$/, ""), 80))}</span></a>`).join("")}</div>
+      ${practica("Las cifras de los ejemplos son inventadas, pero verosímiles. Cuando leas un artículo de verdad, escribe lo que dice él.")}`;
+  }
+  // Copia el ejemplo que se está viendo (una lectura o la sesión con sus lecturas) a los datos del usuario
+  function copiarAMisDatos() {
+    const [ruta] = location.hash.replace(/^#\/?/, "").split("?"), p = ruta.split("/");
+    if (p[0] === "lectura") {
+      const x = buscaLectura(p[1]); if (!x || !esIdEjemplo(x.id)) return;
+      const c = Object.assign(clon(x), { id: genId(), creado: hoy(), modificado: hoy() });
+      c.titulo = c.titulo.replace(/ \(ficticio\)$/, "") + " (copia del ejemplo)";
+      datosUsuario.lecturas.push(c); guardar(true); location.hash = `#/lectura/${c.id}/${p[2] || 1}`;
+    } else if (p[0] === "sesion") {
+      const s = buscaSesion(p[1]); if (!s || !esIdEjemplo(s.id)) return;
+      const mapa = {};
+      L.lecturasDeSesion(s, datos.lecturas).forEach(x => { const c = Object.assign(clon(x), { id: genId(), creado: hoy(), modificado: hoy() }); mapa[x.id] = c.id; datosUsuario.lecturas.push(c); });
+      const cs = Object.assign(clon(s), { id: genId(), lecturas: s.lecturas.map(id => mapa[id]).filter(Boolean), creado: hoy(), modificado: hoy() });
+      datosUsuario.sesiones.push(cs); guardar(true); location.hash = `#/sesion/${cs.id}`;
+    } else return;
+    toast("Copiado a tus datos. Ya es tuyo: cámbialo a tu gusto.", 4000);
   }
 
   // ---------- Utilidades de interfaz ----------
@@ -725,14 +1187,14 @@
 
   // ---------- Copia de seguridad e importar ----------
   async function copiaSeguridad() {
-    const contenido = JSON.stringify({ app: "lecturacritica", v: L.VERSION_DATOS, exportado: hoy(), lecturas: datos.lecturas }, null, 1);
+    const contenido = JSON.stringify({ app: "lecturacritica", v: L.VERSION_DATOS, exportado: hoy(), lecturas: datosUsuario.lecturas, sesiones: datosUsuario.sesiones, intercambio: L.paqueteIntercambio(datosUsuario.lecturas, APP_VERSION, hoy()) }, null, 1);
     const nombre = `Lectura Crítica copia ${new Date().toISOString().slice(0, 10)}.json`;
     const blob = new Blob([contenido], { type: "application/json" });
     const file = new File([blob], nombre, { type: "application/json" });
     if (esIOS() && navigator.canShare && navigator.canShare({ files: [file] })) {
       try { await navigator.share({ files: [file], title: nombre }); } catch (e) { if (e && e.name === "AbortError") return; }
     } else descargar(blob, nombre);
-    datos.ultimaCopia = hoy(); guardar(true);
+    datosUsuario.ultimaCopia = hoy(); guardar(true);
     toast("Copia guardada. Guárdala en un sitio seguro (Archivos, Drive, correo…).", 4500);
     if (rutaActual() === "#/" || rutaActual() === "") renderHome();
   }
@@ -741,13 +1203,16 @@
     fr.onload = () => {
       let s = null; try { s = L.sanearDatos(JSON.parse(fr.result), genId, hoy()); } catch (e) { /* */ }
       if (!s) { toast("Ese archivo no es una copia de Lectura Crítica.", 4000); return; }
+      // Nunca se importa nada con id de ejemplo
+      s.lecturas.forEach(x => { if (esIdEjemplo(x.id)) x.id = genId(); });
+      s.sesiones = s.sesiones.filter(x => !esIdEjemplo(x.id));
       const aplicar = modo => {
-        const r = modo === "sustituir" ? s : L.fusionar(datos, s);
-        datos.lecturas = r.lecturas; guardar(true);
+        const r = modo === "sustituir" ? s : L.fusionar(datosUsuario, s);
+        datosUsuario.lecturas = r.lecturas; datosUsuario.sesiones = r.sesiones; guardar(true);
         toast(`Importadas ${plural(s.lecturas.length, "lectura", "lecturas")}.`, 4000);
         location.hash = "#/"; route();
       };
-      if (!datos.lecturas.length) { aplicar("sustituir"); return; }
+      if (!datosUsuario.lecturas.length && !datosUsuario.sesiones.length) { aplicar("sustituir"); return; }
       confirmar(`<p>La copia tiene <b>${plural(s.lecturas.length, "lectura", "lecturas")}</b>.</p><p><b>Añadir</b> las junta con las tuyas (si una está en las dos, se queda la más reciente): así se trabaja en equipo. Si prefieres <b>sustituir</b> todo lo tuyo por la copia, pulsa «Sustituir».</p>`, "Añadir a mis datos", () => aplicar("anadir"), { titulo: "Importar copia", peligro: false, otro: ["Sustituir", () => confirmar("<p>Se borrarán tus lecturas actuales y se quedará solo lo de la copia. Esto no se puede deshacer.</p>", "Sustituir", () => aplicar("sustituir"))] });
     };
     fr.readAsText(file);
@@ -768,7 +1233,7 @@
   }
 
   // ---------- Enrutado ----------
-  const NAV = [["", "Inicio"], ["lecturas", "Mis lecturas"], ["tipo", "¿Qué estudio es?"], ["calc", "Calcular"], ["plantillas", "Plantillas"]];
+  const NAV = [["", "Inicio"], ["lecturas", "Mis lecturas"], ["tipo", "¿Qué estudio es?"], ["calc", "Calcular"], ["plantillas", "Plantillas"], ["ejemplos", "Ejemplos"], ["aprende", "Aprende"], ["prueba", "Ponte a prueba"], ["glosario", "Glosario"]];
   function buildNav() { $("#calc-nav").innerHTML = NAV.map(([r, t]) => `<a href="#/${r}" data-r="${r}">${t}</a>`).join(""); }
   function noEncontrado(que, href, txt) { view.innerHTML = `<div class="error-box">No se encuentra ${que} en este dispositivo.</div><p><a href="${href}">${txt}</a></p>`; }
   const rutaActual = () => location.hash.split("?")[0];
@@ -781,21 +1246,41 @@
   function route() {
     const [ruta, qs] = (location.hash.replace(/^#\/?/, "") || "").split("?");
     const partes = ruta.split("/"), q = new URLSearchParams(qs || "");
-    actual = null;
+    actual = null; actualSesion = null;
+    const informe = q.get("informe") === "1";
+    document.body.classList.toggle("ver-informe", informe);
+    if (partes[0] !== "lectura" || partes[2] !== "club") document.body.classList.remove("modo-proyector");
+    const idR = partes[1] || "";
+    modoEjemplo = partes[0] === "ejemplos" || (["lectura", "sesion"].includes(partes[0]) && esIdEjemplo(idR));
+    datos = modoEjemplo ? ejemplos() : datosUsuario;
+    $("#banner-ejemplo").hidden = !modoEjemplo || informe || partes[0] === "ejemplos";
     let navR = partes[0];
+    if (informe && ["lectura", "sesion", "plantillas"].includes(partes[0])) { renderDoc(); if (esIOS()) prepararPDF(); window.scrollTo(0, 0); return; }
     if (partes[0] === "lecturas" && partes[1] === "nueva") {
       const l = nuevaLectura();
       history.replaceState(null, "", `#/lectura/${l.id}/1`); renderLectura(l, 1); navR = "lecturas";
     } else if (partes[0] === "lectura") {
       const l = buscaLectura(partes[1]) || borradores.get(partes[1]);
       if (!l) noEncontrado("esa lectura", "#/lecturas", "Ir a mis lecturas");
+      else if (partes[2] === "club") renderClub(l, parseInt(q.get("q"), 10) || 1);
       else {
         let n = parseInt(partes[2], 10);
         if (!(n >= 1 && n <= 7)) { const p = L.pasoPendiente(l); n = p ? p.n : 7; history.replaceState(null, "", `#/lectura/${l.id}/${n}`); }
         renderLectura(l, n);
       }
       navR = "lecturas";
+    } else if (partes[0] === "sesiones" && partes[1] === "nueva") {
+      const x = L.nuevaSesion(genId(), hoy()); datosUsuario.sesiones.push(x); guardar();
+      history.replaceState(null, "", `#/sesion/${x.id}`); renderSesion(x); navR = "lecturas";
+    } else if (partes[0] === "sesion") {
+      const x = buscaSesion(partes[1]);
+      if (!x) noEncontrado("esa sesión", "#/lecturas", "Ir a mis lecturas"); else renderSesion(x);
+      navR = "lecturas";
     } else if (partes[0] === "lecturas") renderLista();
+    else if (partes[0] === "ejemplos") renderEjemplos();
+    else if (partes[0] === "aprende") renderAprende(parseInt(partes[1], 10) || 0);
+    else if (partes[0] === "prueba") renderPrueba(["tipo", "calcula"].includes(partes[1]) ? partes[1] : (C.TEMAS_TEST[partes[1]] ? Number(partes[1]) : 0));
+    else if (partes[0] === "glosario") renderGlosario();
     else if (partes[0] === "tipo") {
       const para = q.get("para") || "";
       if (para !== arbolPara) { arbolPara = para; arbolResp = []; }
@@ -803,6 +1288,7 @@
     } else if (partes[0] === "plantillas") renderPlantillas(partes[1]);
     else if (partes[0] === "calc") renderCalc(partes[1], q.get("d"));
     else { renderHome(); navR = ""; }
+    if (modoEjemplo) navR = "ejemplos";
     $$("#calc-nav a").forEach(a => a.classList.toggle("active", a.dataset.r === navR));
     const act = $("#calc-nav a.active"); if (act && act.scrollIntoView) act.scrollIntoView({ block: "nearest", inline: "center" });
     window.scrollTo(0, 0);
@@ -824,6 +1310,10 @@
     const t = e.target, l = actual;
     if (t.matches("textarea.txt-in")) autoAlto(t);
     if (t.id === "buscar-lec") { filtroLista = t.value; $("[data-zona='lista']").innerHTML = listaInner(); return; }
+    const f = t.dataset.f, esSel = t.tagName === "SELECT";
+    if (t.dataset.sk && actualSesion) { actualSesion[t.dataset.sk] = t.value; actualSesion.modificado = hoy(); guardar(); return; }
+    if (t.dataset.ejc) { (respCalc[t.dataset.ejc] = respCalc[t.dataset.ejc] || {}).v = t.value; respCalc[t.dataset.ejc].ver = false; return; }
+    if (t.dataset.as && l) { const a = buscaEn(l.club.asistentes, t.dataset.as); if (a) { a.nombre = t.value; tocado(l); } return; }
     if (t.dataset.cs) {
       const tipo = t.dataset.cs, s = suelta(tipo);
       if (t.dataset.nv) s.niveles[Number(t.dataset.nv)][f] = t.value; else if (f === "nombre") s.nombre = t.value; else s.entrada[f] = t.value;
@@ -832,7 +1322,6 @@
       return;
     }
     if (!l) return;
-    const f = t.dataset.f, esSel = t.tagName === "SELECT";
     if (t.dataset.q) { L.ponerRespuesta(l, t.dataset.q, "nota", t.value); tocado(l); refrescar(); return; }
     if (t.dataset.calc) {
       const c = buscaEn(l.calculos, t.dataset.calc); if (!c) return;
@@ -863,6 +1352,30 @@
         const c = Object.assign(clon(x), { id: genId(), titulo: (x.titulo || "Lectura") + " (copia)", creado: hoy(), modificado: hoy() });
         datos.lecturas.push(c); guardar(true); renderLista(); toast("Lectura duplicada.", 3000); return;
       }
+      case "volver": location.hash = location.hash.split("?")[0]; return;
+      case "imprimir": imprimir(); return;
+      case "doc-word": descargarWord(); return;
+      case "doc-word-ir": { const h = b.dataset.href, prev = location.hash; history.replaceState(null, "", h); descargarWord(); history.replaceState(null, "", prev); return; }
+      case "excel": exportarExcel(); return;
+      case "quiz": respuestasQuiz[b.dataset.q] = Number(b.dataset.o); { const y = window.scrollY; route(); window.scrollTo(0, y); } return;
+      case "quiz-reset": Object.keys(respuestasQuiz).forEach(k => delete respuestasQuiz[k]); route(); return;
+      case "ej-tipo": respTipo[b.dataset.i] = b.dataset.v; { const y = window.scrollY; renderEjTipo(); window.scrollTo(0, y); } return;
+      case "ej-tipo-reset": Object.keys(respTipo).forEach(k => delete respTipo[k]); renderEjTipo(); return;
+      case "ej-calc": (respCalc[b.dataset.i] = respCalc[b.dataset.i] || {}).ver = true; { const y = window.scrollY; renderEjCalc(); window.scrollTo(0, y); } return;
+      case "ses-del": {
+        const x = buscaSesion(b.dataset.id); if (!x) return;
+        confirmar(`<p>Se borrará la sesión <b>«${esc(L.corto(x.titulo || "sin título", 80))}»</b>. Sus lecturas no se borran.</p>`, "Borrar", () => { datosUsuario.sesiones = datosUsuario.sesiones.filter(y => y.id !== x.id); guardar(true); renderLista(); toast("Sesión borrada.", 3000); });
+        return;
+      }
+      case "ses-dec": if (actualSesion) { actualSesion.decision = actualSesion.decision === b.dataset.v ? "" : b.dataset.v; actualSesion.modificado = hoy(); guardar(); const y = window.scrollY; renderSesion(actualSesion); window.scrollTo(0, y); } return;
+      case "ses-quitar": if (actualSesion) { actualSesion.lecturas = actualSesion.lecturas.filter(id => id !== b.dataset.id); actualSesion.modificado = hoy(); guardar(); renderSesion(actualSesion); } return;
+      case "ses-anadir": if (actualSesion) { const id = ($("#ses-otra") || {}).value; if (id && !actualSesion.lecturas.includes(id)) { actualSesion.lecturas.push(id); actualSesion.modificado = hoy(); guardar(); renderSesion(actualSesion); } } return;
+      case "ses-leer": if (actualSesion) {
+        const x = L.nuevaLectura(genId(), hoy()); x.pregunta = actualSesion.pregunta || "";
+        datosUsuario.lecturas.push(x); actualSesion.lecturas.push(x.id); actualSesion.modificado = hoy(); guardar(true); location.hash = `#/lectura/${x.id}/1`;
+      } return;
+      case "copiar-ej": copiarAMisDatos(); return;
+      case "proyector": document.body.classList.toggle("modo-proyector"); route(); return;
       case "arbol": arbolResp.push({ id: b.dataset.n, r: b.dataset.v }); renderArbol(); window.scrollTo(0, 0); return;
       case "arbol-atras": arbolResp.pop(); renderArbol(); return;
       case "arbol-reset": arbolResp = []; renderArbol(); return;
@@ -893,7 +1406,7 @@
     }
     if (!l) return;
     switch (act) {
-      case "resp": { const v = b.dataset.v, q = b.dataset.q; L.ponerRespuesta(l, q, "valor", L.valor(l, q) === v ? "" : v); tocado(l); repintar(); return; }
+      case "resp": { const v = b.dataset.v, q = b.dataset.q; L.ponerRespuesta(l, q, "valor", L.valor(l, q) === v ? "" : v); tocado(l); if (pasoActual) repintar(); else { const y = window.scrollY; route(); window.scrollTo(0, y); } return; }
       case "filtro": { const k = b.dataset.f; l.filtro[k] = l.filtro[k] === b.dataset.v ? "" : b.dataset.v; tocado(l); repintar(); return; }
       case "plantilla": {
         const nueva = b.dataset.pl;
@@ -920,6 +1433,13 @@
       case "nueva-acc": l.veredicto.acciones.push(L.nuevaAccion(genId())); tocado(l); repintar(); { const ins = $$("[data-acc][data-f='que']"); if (ins.length) ins[ins.length - 1].focus(); } return;
       case "del-acc": l.veredicto.acciones = l.veredicto.acciones.filter(x => x.id !== b.dataset.id); tocado(l); repintar(); return;
       case "normalizar": normalizarCita(l); return;
+      case "pubmed-filtro": filtroPubMed = b.dataset.v; repintar(); return;
+      case "voto": L.ponerVoto(l, b.dataset.q, b.dataset.a, b.dataset.v); tocado(l); { const y = window.scrollY; route(); window.scrollTo(0, y); } return;
+      case "usar-mayoria": L.ponerRespuesta(l, b.dataset.q, "valor", b.dataset.v); tocado(l); { const y = window.scrollY; route(); window.scrollTo(0, y); } return;
+      case "as-nuevo": l.club.asistentes.push(L.nuevoAsistente(genId(), "")); tocado(l); route(); { const ins = $$("[data-as]"); if (ins.length) ins[ins.length - 1].focus(); } return;
+      case "as-del": l.club.asistentes = l.club.asistentes.filter(a => a.id !== b.dataset.id); Object.values(l.club.votos).forEach(V => delete V[b.dataset.id]); tocado(l); route(); return;
+      case "lec-a-ses": { const x = buscaSesion(($("#ses-de-lec") || {}).value); if (!x) return; tocado(l); x.lecturas.push(l.id); x.modificado = hoy(); guardar(); toast(`Añadida a «${L.corto(x.titulo || "la sesión", 50)}».`, 3000); repintar(); return; }
+      case "lec-nueva-ses": { tocado(l); const x = Object.assign(L.nuevaSesion(genId(), hoy()), { pregunta: lleno(l.pregunta) ? l.pregunta : L.preguntaSugerida(l), lecturas: [l.id] }); datosUsuario.sesiones.push(x); guardar(true); location.hash = `#/sesion/${x.id}`; return; }
       case "calc-nuevo": l.calculos.push(L.nuevoCalculo(genId(), b.dataset.tipo)); tocado(l); repintar(); { const c = $$(".calc-card[data-calcid]").pop(); const i = c && c.querySelector(".calc-in, input"); if (i) i.focus(); } return;
       case "calc-del": {
         const c = buscaEn(l.calculos, b.dataset.id); if (!c) return;
@@ -944,6 +1464,7 @@
   // «Explicado fácil» recuerda si se dejó abierto
   view.addEventListener("toggle", e => { if (e.target.matches("details[data-recordar]")) escribir(KEY_FACIL, e.target.open ? "1" : "0"); }, true);
   $("#input-importar").addEventListener("change", e => { const f = e.target.files[0]; if (f) importar(f); e.target.value = ""; });
+  $("#banner-copiar").addEventListener("click", copiarAMisDatos);
 
   // Copia la referencia y abre el Normalizador Bibliográfico (herramienta de apoyo: no se pasan datos)
   async function normalizarCita(l) {

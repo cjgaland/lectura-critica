@@ -55,7 +55,7 @@
   const COLORES = { verde: "Verde", ambar: "Ámbar", rojo: "Rojo" };
   const IMPORTANCIA = n => n >= 7 ? "crítico" : n >= 4 ? "importante" : n >= 1 ? "poco importante" : "";
   // Preguntas de aplicabilidad que, si se contestan «No», ponen el bloque en rojo
-  const CLAVE_APLICA = new Set(["ec-9", "rs-8", "dx-10", "co-10", "cc-10", "cu-10", "ee-9", "ee-11", "rp-11"]);
+  const CLAVE_APLICA = new Set(["ec-9", "rs-8", "dx-10", "co-10", "cc-10", "cu-10", "ee-9", "ee-11", "rp-11", "ad-9"]);
 
   // ---------- Plantillas ----------
   const plantilla = id => PL.PLANTILLAS.find(p => p.id === id) || null;
@@ -83,12 +83,13 @@
     return {
       id, titulo: "",
       referencia: { texto: "", autores: "", revista: "", anio: "", doi: "", pmid: "", url: "" },
-      pico: { p: "", i: "", c: "", o: "" }, pregunta: "",
+      pico: { p: "", i: "", c: "", o: "" }, pregunta: "", resumen: "",
       filtro: { responde: "", tipoResumen: "", reciente: "", nota: "" },
       plantilla: "", plantillaVersion: 0,
       respuestas: {}, aparte: {},
       desenlaces: [], confusores: [], calculos: [],
       veredicto: nuevoVeredicto(),
+      club: { asistentes: [], votos: {} },
       notas: "", fecha: String(fecha || "").slice(0, 10), creado: fecha || "", modificado: fecha || ""
     };
   }
@@ -303,6 +304,192 @@
     return { texto: `Terminaste «${corto(nombreLectura(ult) || "tu lectura", 70)}» (${DECISIONES[ult.veredicto.decision].nom.toLowerCase()}). ¿Lees otro artículo sobre la misma pregunta?`, btn: "Leer otro artículo", href: "#/lecturas/nueva" };
   }
 
+  // ---------- Club de lectura: cada asistente contesta (mejora A) ----------
+  const nuevoAsistente = (id, nombre) => ({ id, nombre: nombre || "" });
+  function ponerVoto(l, qid, aid, v) {
+    const V = l.club.votos[qid] || (l.club.votos[qid] = {});
+    if (!v || V[aid] === v) delete V[aid]; else V[aid] = v;
+    if (!Object.keys(V).length) delete l.club.votos[qid];
+  }
+  // Reparto de los votos de una pregunta (solo de los asistentes que siguen en la lista)
+  function reparto(l, qid) {
+    const V = l.club.votos[qid] || {}, ids = new Set(l.club.asistentes.map(a => a.id)), r = { si: 0, no: 0, nose: 0, total: 0 };
+    Object.keys(V).forEach(aid => { if (ids.has(aid) && r[V[aid]] != null) { r[V[aid]]++; r.total++; } });
+    return r;
+  }
+  // La respuesta más votada (si hay empate en cabeza, ninguna) y si hay discrepancia (a la vez «Sí» y «No»)
+  function mayoria(l, qid) {
+    const r = reparto(l, qid), orden = ["si", "no", "nose"].sort((a, b) => r[b] - r[a]);
+    return r.total && r[orden[0]] > r[orden[1]] ? orden[0] : "";
+  }
+  const discrepancia = (l, qid) => { const r = reparto(l, qid); return r.si > 0 && r.no > 0 && Math.min(r.si, r.no) / r.total >= 0.25; };
+
+  // ---------- Sesiones: varias lecturas sobre la misma pregunta (mejora G) ----------
+  const nuevaSesion = (id, fecha) => ({ id, titulo: "", pregunta: "", unidad: "", fecha: String(fecha || "").slice(0, 10), lecturas: [], conclusion: "", decision: "", creado: fecha || "", modificado: fecha || "" });
+  const lecturasDeSesion = (s, lecturas) => s.lecturas.map(id => lecturas.find(l => l.id === id)).filter(Boolean);
+
+  // ---------- Resultado clave de una lectura (para la ficha, el Excel y el intercambio) ----------
+  function resultadoClave(l) {
+    for (const c of l.calculos) {
+      const r = resultadoCalculo(c); if (!r.ok) continue;
+      if (c.tipo === "tratamiento") return { desenlace: c.nombre, medida: r.nnt.v === Infinity ? "RAR" : r.nnt.tipo, valor: r.nnt.v === Infinity ? 0 : r.nnt.v, icInf: r.nnt.cruza ? null : r.nnt.inf, icSup: r.nnt.cruza ? null : r.nnt.sup, texto: (c.nombre ? c.nombre + ": " : "") + CA.nntTxt(r.nnt) };
+      if (c.tipo === "diagnostico" || c.tipo === "bayes") return { desenlace: c.nombre, medida: "LR+", valor: r.lrp.v, icInf: r.lrp.inf != null ? r.lrp.inf : null, icSup: r.lrp.sup != null ? r.lrp.sup : null, texto: `LR+ ${CA.fmt(r.lrp.v)}; LR− ${CA.fmt(r.lrn.v)}` };
+      if (c.tipo === "or") return { desenlace: c.nombre, medida: "OR", valor: r.or.v, icInf: r.or.inf, icSup: r.or.sup, texto: `OR ${CA.fmt(r.or.v)} (IC 95 %: ${CA.icTxt(r.or)})` };
+      if (c.tipo === "cei" && isFinite(r.rcei)) return { desenlace: c.entrada.unidad, medida: "RCEI", valor: r.rcei, icInf: null, icSup: null, texto: CA.textoCEI(r, c.entrada.unidad) };
+      if (c.tipo === "niveles") return { desenlace: "", medida: "LR", valor: r.filas[0].lr.v, icInf: r.filas[0].lr.inf, icSup: r.filas[0].lr.sup, texto: r.filas.map((x, i) => `${x.nombre || "Nivel " + (i + 1)}: LR ${CA.fmt(x.lr.v)}`).join("; ") };
+    }
+    const q = preguntasDe(plantilla(l.plantilla), "resultados").find(x => lleno(resp(l, x.id).nota));
+    return q ? { desenlace: "", medida: "", valor: null, icInf: null, icSup: null, texto: corto(resp(l, q.id).nota.replace(/\s+/g, " "), 300) } : null;
+  }
+
+  // ---------- Paquete de intercambio «lecturacritica-lecturas» v1 (Diseño, 6.4) ----------
+  const FORMATO_INTERCAMBIO = "lecturacritica-lecturas", VERSION_INTERCAMBIO = 1;
+  const numONull = v => typeof v === "number" && isFinite(v) ? Number(v.toPrecision(6)) : null;
+  function paqueteIntercambio(lecturas, appVersion, generado) {
+    return {
+      formato: FORMATO_INTERCAMBIO, version: VERSION_INTERCAMBIO, app: "lecturacritica", appVersion, generado,
+      lecturas: lecturas.filter(l => !/^ej-/.test(l.id)).map(l => {
+        const pl = plantilla(l.plantilla), rc = resultadoClave(l), el = eliminacion(l).estado, s = b => semaforo(l, b).color || null;
+        return {
+          id: l.id, titulo: l.titulo, cita: l.referencia.texto, doi: l.referencia.doi, pmid: l.referencia.pmid, url: l.referencia.url, anio: l.referencia.anio,
+          pregunta: lleno(l.pregunta) ? l.pregunta : preguntaSugerida(l), pico: Object.assign({}, l.pico),
+          tipo: l.plantilla || null, tipoNombre: pl ? pl.nombre : null,
+          eliminacion: el === "falla" ? "falla" : el === "dudosa" ? "dudosa" : el === "supera" ? "supera" : null,
+          semaforo: { validez: s("validez"), resultados: s("resultados"), aplicabilidad: s("aplicabilidad") },
+          decision: l.veredicto.decision || null, motivo: l.veredicto.motivo,
+          resultadosClave: rc ? [{ desenlace: rc.desenlace, medida: rc.medida, valor: numONull(rc.valor), icInf: numONull(rc.icInf), icSup: numONull(rc.icSup), texto: rc.texto }] : [],
+          mensaje: l.veredicto.mensaje, fecha: l.fecha
+        };
+      })
+    };
+  }
+  // Lee y valida un paquete (para las apps que lo traigan; aquí se usa en los tests)
+  function leerIntercambio(o) {
+    if (!o || o.formato !== FORMATO_INTERCAMBIO || o.version !== VERSION_INTERCAMBIO || !Array.isArray(o.lecturas)) return null;
+    return o.lecturas.filter(x => x && typeof x.id === "string");
+  }
+
+  // ---------- Buscar en PubMed desde la PICO (mejora I) ----------
+  const FILTROS_PUBMED = { "": "Sin filtro", ensayo: "Ensayos clínicos", revision: "Revisiones sistemáticas", diagnostico: "Diagnóstico" };
+  const SUFIJO_PUBMED = { ensayo: "randomized controlled trial[pt]", revision: "systematic[sb]", diagnostico: "(sensitiv*[Title/Abstract] OR sensitivity and specificity[MeSH Terms] OR diagnos*[Title/Abstract])" };
+  function busquedaPubMed(l, filtro) {
+    const t = x => String(x || "").replace(/[()"\[\]]/g, " ").replace(/\s+/g, " ").trim();
+    const partes = [l.pico.p, l.pico.i, l.pico.o].map(t).filter(lleno).map(x => /\s/.test(x) ? `(${x})` : x);
+    if (!partes.length) return null;
+    const q = partes.join(" AND ") + (SUFIJO_PUBMED[filtro] ? " AND " + SUFIJO_PUBMED[filtro] : "");
+    return { consulta: q, url: "https://pubmed.ncbi.nlm.nih.gov/?term=" + encodeURIComponent(q) };
+  }
+
+  // ---------- Documentos (lista de bloques para Word, vista previa y PDF) ----------
+  const FONDO = { si: "DCFCE7", no: "FFE4E6", nose: "FEF3C7", verde: "DCFCE7", ambar: "FEF3C7", rojo: "FFE4E6" };
+  const COLOR_NOM = { verde: "Verde", ambar: "Ámbar", rojo: "Rojo" };
+  const refTexto = l => lleno(l.referencia.texto) ? l.referencia.texto : [l.referencia.autores, l.titulo, l.referencia.revista, l.referencia.anio, lleno(l.referencia.doi) ? "doi: " + l.referencia.doi : ""].filter(lleno).join(". ");
+  const citaPie = pl => pl ? (pl.propia ? pl.cita : `Preguntas propias de la app, basadas en los criterios de la plantilla CASPe. ${pl.cita}`) : "";
+  function documentoFicha(l, fecha) {
+    const B = [], pl = plantilla(l.plantilla), nom = nombreLectura(l) || "Lectura sin título", d = l.veredicto.decision;
+    B.push({ t: "portada", titulo: "Lectura crítica · Ficha", sub: nom, extra: [pl ? pl.nombre : "", refTexto(l) !== nom ? refTexto(l) : "", "Fecha: " + (fmtFecha(l.fecha) || fecha)].filter(lleno) });
+    const preg = lleno(l.pregunta) ? l.pregunta : preguntaSugerida(l);
+    B.push({ t: "h1", texto: "1. La pregunta" }, { t: "p", texto: preg || "Sin pregunta escrita." });
+    if ([l.pico.p, l.pico.i, l.pico.c, l.pico.o].some(lleno)) B.push({ t: "tabla", fuente: 9, sinCab: true, anchos: [22, 78], filas: [["Pacientes (P)", l.pico.p], ["Intervención (I)", l.pico.i], ["Comparación (C)", l.pico.c], ["Resultado (O)", l.pico.o]].filter(f => lleno(f[1])).map(([a, b]) => [{ texto: a, negrita: true }, b]) });
+    if (l.filtro.responde === "no") B.push({ t: "p", runs: [{ texto: "Filtro de dos minutos: ", negrita: true }, { texto: "no responde a la pregunta. Se descartó sin leerlo entero." }] });
+    if (pl) {
+      B.push({ t: "h1", texto: `2. ${pl.nombre}: las preguntas` });
+      const el = eliminacion(l);
+      if (el.estado === "falla") B.push({ t: "p", runs: [{ texto: "No supera las preguntas de eliminación. ", negrita: true }, { texto: "No merece la pena seguir." }] });
+      pl.bloques.forEach(b => {
+        B.push({ t: "h2", texto: `${PL.BLOQUES[b.id].titulo} ${PL.BLOQUES[b.id].sub}` });
+        B.push({ t: "tabla", fuente: 8, cab: ["Nº", "Pregunta", "Respuesta", "Nota o resultado"], anchos: [5, 47, 14, 34], filas: preguntasDe(pl, b.id).map(q => {
+          const r = resp(l, q.id), v = r.valor;
+          const cel = q.resp === "abierta" ? { texto: contestada(l, q) ? "Ver nota" : "—", centro: true } : { texto: v ? RESPUESTAS[v] : "—", centro: true, negrita: !!v, fondo: FONDO[v] };
+          const nota = q.resp === "abierta" && !lleno(r.nota) ? calculosDe(l, q).map(textoCalculo).filter(lleno).join("\n") : r.nota;
+          return [{ texto: String(numeroDe(pl, q.id)), centro: true }, (q.elim ? "[Eliminación] " : "") + q.texto, cel, nota];
+        }) });
+      });
+      if (l.desenlaces.some(x => lleno(x.nombre))) B.push({ t: "h2", texto: "Desenlaces y su importancia (GRADE, 1-9)" }, { t: "tabla", fuente: 9, cab: ["Desenlace", "Importancia", "Tipo"], anchos: [60, 22, 18], filas: l.desenlaces.filter(x => lleno(x.nombre)).map(x => [x.nombre, lleno(x.importancia) ? `${x.importancia} · ${IMPORTANCIA(Number(x.importancia))}` : "—", x.sentido === "dano" ? "Daño" : "Beneficio"]) });
+      if (l.confusores.some(x => lleno(x.texto))) B.push({ t: "h2", texto: "Factores de confusión" }, { t: "tabla", fuente: 9, cab: ["Factor", "¿Lo tuvieron en cuenta?"], anchos: [70, 30], filas: l.confusores.filter(x => lleno(x.texto)).map(x => [x.texto, { texto: x.tenido ? RESPUESTAS[x.tenido] : "—", fondo: FONDO[x.tenido] }]) });
+      const cs = l.calculos.map(textoCalculo).filter(lleno);
+      if (cs.length) B.push({ t: "h2", texto: "Resultados calculados" }, { t: "lista", items: cs });
+      B.push({ t: "h1", texto: "3. Veredicto" }, { t: "tabla", fuente: 9, cab: ["Bloque", "Semáforo", "Por qué"], anchos: [24, 14, 62], filas: ["validez", "resultados", "aplicabilidad"].map(k => { const x = semaforo(l, k); return [{ texto: PL.BLOQUES[k].titulo, negrita: true }, { texto: COLOR_NOM[x.color] || "—", centro: true, negrita: true, fondo: FONDO[x.color] }, x.motivo]; }) });
+    } else B.push({ t: "h1", texto: "3. Veredicto" });
+    B.push({ t: "p", runs: [{ texto: "Decisión: ", negrita: true }, { texto: d ? DECISIONES[d].nom : "Sin decidir" }, ...(lleno(l.veredicto.motivo) ? [{ texto: ". " + l.veredicto.motivo }] : [])] });
+    const acc = l.veredicto.acciones.filter(a => lleno(a.que));
+    if (acc.length) B.push({ t: "h2", texto: "Qué hacemos ahora" }, { t: "tabla", fuente: 9, cab: ["Qué", "Quién", "Cuándo"], anchos: [56, 26, 18], filas: acc.map(a => [a.que, a.quien, a.cuando]) });
+    if (lleno(l.veredicto.mensaje)) B.push({ t: "h2", texto: "Mensaje para llevar" }, { t: "p", runs: [{ texto: l.veredicto.mensaje, negrita: true }] });
+    if (lleno(l.notas)) B.push({ t: "h2", texto: "Notas" }, { t: "p", texto: l.notas });
+    if (pl) B.push({ t: "p", estilo: "nota", texto: citaPie(pl) });
+    return { titulo: "Lectura crítica · " + corto(nom, 80), bloques: B };
+  }
+  function documentoSesion(s, lecturas, fecha) {
+    const B = [], L_ = lecturasDeSesion(s, lecturas), nom = s.titulo || "Sesión bibliográfica";
+    B.push({ t: "portada", titulo: "Lectura crítica · Sesión", sub: nom, extra: [s.unidad, "Fecha: " + (fmtFecha(s.fecha) || fecha), plural(L_.length, "artículo", "artículos")].filter(lleno) });
+    B.push({ t: "h1", texto: "La pregunta" }, { t: "p", texto: s.pregunta || "Sin pregunta escrita." });
+    B.push({ t: "h1", texto: "Los artículos" }, { t: "tabla", fuente: 8, cab: ["Artículo", "Tipo", "Válido", "Qué dice", "Me sirve", "Resultado clave", "Decisión"], anchos: [26, 12, 8, 8, 8, 24, 14], filas: L_.map(l => {
+      const pl = plantilla(l.plantilla), c = k => { const x = pl ? semaforo(l, k).color : ""; return { texto: COLOR_NOM[x] || "—", centro: true, fondo: FONDO[x] }; }, rc = resultadoClave(l);
+      return [{ texto: nombreLectura(l) || "Sin título", negrita: true }, pl ? pl.corto : (l.filtro.responde === "no" ? "Filtro" : "—"), c("validez"), c("resultados"), c("aplicabilidad"), rc ? rc.texto : "", { texto: l.veredicto.decision ? DECISIONES[l.veredicto.decision].nom : "—", negrita: true, fondo: { aplicar: "DCFCE7", esperar: "FEF3C7", descartar: "FFE4E6" }[l.veredicto.decision] }];
+    }) });
+    L_.filter(l => lleno(l.veredicto.mensaje)).forEach(l => B.push({ t: "p", runs: [{ texto: (nombreLectura(l) || "Lectura") + ": ", negrita: true }, { texto: l.veredicto.mensaje }] }));
+    B.push({ t: "h1", texto: "Conclusión de la sesión" }, { t: "p", runs: [{ texto: "Decisión: ", negrita: true }, { texto: s.decision ? DECISIONES[s.decision].nom : "Sin decidir" }] });
+    if (lleno(s.conclusion)) B.push({ t: "p", texto: s.conclusion });
+    return { titulo: "Lectura crítica · Sesión · " + corto(nom, 80), bloques: B };
+  }
+  // Plantilla en blanco para contestar a lápiz (mejora J)
+  function documentoPlantilla(pl) {
+    const B = [], hueco = "_______________________________________________";
+    B.push({ t: "portada", titulo: "Plantilla de lectura crítica", sub: pl.nombre, extra: ["Artículo: " + hueco, "Tu pregunta (PICO): " + hueco, "Lo lee: ____________________   Fecha: ____ / ____ / ________"] });
+    B.push({ t: "p", texto: "Contesta cada pregunta con Sí, No o No se puede saber (NS). Las preguntas de eliminación van primero: si alguna es «No», no merece la pena seguir." });
+    pl.bloques.forEach(b => {
+      B.push({ t: "h1", texto: `${PL.BLOQUES[b.id].titulo} ${PL.BLOQUES[b.id].sub}` });
+      const qs = preguntasDe(pl, b.id);
+      B.push({ t: "tabla", fuente: 8, cab: ["Nº", "Pregunta y pistas", "Sí", "No", "NS", "Notas"], anchos: [5, 55, 6, 6, 6, 22], filas: qs.map(q => [{ texto: String(numeroDe(pl, q.id)), centro: true }, `${q.elim ? "[Eliminación] " : ""}${q.texto}\n${q.pistas.map(x => "· " + x).join("\n")}`, ...(q.resp === "abierta" ? [{ texto: "Escribe el resultado →", centro: true }, "", ""] : q.resp === "sn" ? ["☐", "☐", "—"] : ["☐", "☐", "☐"]).map(x => typeof x === "string" ? { texto: x, centro: true } : x), " "]) });
+      if (b.id === "validez") B.push({ t: "p", runs: [{ texto: "¿Merece la pena seguir? ", negrita: true }, { texto: "☐ Sí   ☐ No" }] });
+    });
+    B.push({ t: "h1", texto: "Decisión" }, { t: "p", texto: "☐ Aplicar   ☐ Esperar   ☐ Descartar" }, { t: "p", texto: "Motivo: " + hueco }, { t: "p", texto: "Qué hacemos ahora (quién, qué, cuándo): " + hueco });
+    B.push({ t: "p", estilo: "nota", texto: citaPie(pl) });
+    return { titulo: "Plantilla · " + pl.nombre, bloques: B };
+  }
+
+  // ---------- Excel ----------
+  const ESTILOS_XLSX = {
+    titulo: { negrita: true, tamano: 14, colorTexto: "FFFFFF", colorFondo: "9D174D", borde: false },
+    sub: { cursiva: true, colorTexto: "444444", borde: false },
+    cab: { negrita: true, colorTexto: "FFFFFF", colorFondo: "0D1B2A", alineacion: "center", ajustarTexto: true },
+    celda: { ajustarTexto: true, vertical: "top" },
+    negrita: { negrita: true, ajustarTexto: true, vertical: "top" },
+    centro: { alineacion: "center", vertical: "top", ajustarTexto: true },
+    verde: { negrita: true, alineacion: "center", vertical: "top", colorFondo: "DCFCE7", colorTexto: "14532D" },
+    ambar: { negrita: true, alineacion: "center", vertical: "top", colorFondo: "FEF3C7", colorTexto: "92400E" },
+    rojo: { negrita: true, alineacion: "center", vertical: "top", colorFondo: "FFE4E6", colorTexto: "881337" }
+  };
+  const ESTILO_DE = { si: "verde", no: "rojo", nose: "ambar", verde: "verde", ambar: "ambar", rojo: "rojo", aplicar: "verde", esperar: "ambar", descartar: "rojo" };
+  function hojasExcel(lecturas, sesiones, fecha) {
+    const T = (texto, estilo = "celda") => ({ texto: texto == null ? "" : String(texto), estilo });
+    const cabecera = (titulo, cols) => { const f = [[T(titulo, "titulo")], [T("Exportado de la app Lectura Crítica · " + fecha, "sub")], cols.map(x => T(x, "cab"))]; f[0][0].combinar = cols.length; return f; };
+    const L_ = lecturas.slice().sort((a, b) => String(b.modificado).localeCompare(String(a.modificado)));
+    const h1 = cabecera("Mis lecturas", ["Título", "Referencia", "DOI", "Pregunta", "Tipo de estudio", "Eliminación", "Válido", "Qué dice", "Me sirve", "Resultado clave", "Decisión", "Motivo", "Mensaje para llevar", "Fecha"]);
+    L_.forEach(l => {
+      const pl = plantilla(l.plantilla), c = k => { const x = pl ? semaforo(l, k).color : ""; return T(COLOR_NOM[x] || "", ESTILO_DE[x] || "centro"); }, rc = resultadoClave(l), el = eliminacion(l).estado;
+      h1.push([T(nombreLectura(l), "negrita"), T(refTexto(l)), T(l.referencia.doi), T(lleno(l.pregunta) ? l.pregunta : preguntaSugerida(l)), T(pl ? pl.nombre : ""), T({ falla: "No la supera", dudosa: "Dudosa", supera: "La supera", pendiente: "" }[el], "centro"), c("validez"), c("resultados"), c("aplicabilidad"), T(rc ? rc.texto : ""), T(l.veredicto.decision ? DECISIONES[l.veredicto.decision].nom : "", ESTILO_DE[l.veredicto.decision] || "centro"), T(l.veredicto.motivo), T(l.veredicto.mensaje), T(fmtFecha(l.fecha), "centro")]);
+    });
+    const h2 = cabecera("Respuestas", ["Lectura", "Tipo", "Nº", "Bloque", "Pregunta", "Eliminación", "Respuesta", "Nota o resultado"]);
+    L_.forEach(l => { const pl = plantilla(l.plantilla); preguntasDe(pl).forEach(q => { const r = resp(l, q.id); h2.push([T(nombreLectura(l), "negrita"), T(pl.corto), T(numeroDe(pl, q.id), "centro"), T(PL.BLOQUES[q.bloque].titulo), T(q.texto), T(q.elim ? "Sí" : "", "centro"), T(q.resp === "abierta" ? "" : (RESPUESTAS[r.valor] || ""), ESTILO_DE[r.valor] || "centro"), T(r.nota)]); }); });
+    const h3 = cabecera("Cálculos", ["Lectura", "Calculadora", "Desenlace", "Datos", "Resultado"]);
+    L_.forEach(l => l.calculos.forEach(c => { const e = Object.entries(c.entrada).filter(([, v]) => lleno(v)).map(([k, v]) => `${k} = ${v}`).concat(c.niveles.filter(n => lleno(n.a) || lleno(n.b)).map((n, i) => `${n.nombre || "nivel " + (i + 1)}: ${n.a} / ${n.b}`)).join("; "); h3.push([T(nombreLectura(l), "negrita"), T(CA.CALCS[c.tipo].titulo), T(c.nombre), T(e), T(textoCalculo(c))]); }));
+    const h4 = cabecera("Desenlaces y acciones", ["Lectura", "Qué", "Detalle", "Quién / importancia", "Cuándo / tipo"]);
+    L_.forEach(l => { l.desenlaces.filter(x => lleno(x.nombre)).forEach(x => h4.push([T(nombreLectura(l), "negrita"), T("Desenlace"), T(x.nombre), T(x.importancia ? `${x.importancia} · ${IMPORTANCIA(Number(x.importancia))}` : "", "centro"), T(x.sentido === "dano" ? "Daño" : "Beneficio")])); l.veredicto.acciones.filter(a => lleno(a.que)).forEach(a => h4.push([T(nombreLectura(l), "negrita"), T("Acción"), T(a.que), T(a.quien), T(a.cuando)])); });
+    const hojas = [
+      { nombre: "Lecturas", filas: h1, opciones: { anchoColumnas: [34, 40, 18, 40, 18, 13, 9, 9, 9, 34, 11, 34, 34, 11], congelar: { filas: 3, columnas: 0 }, altoFilas: { 1: 24 }, primera: true } },
+      { nombre: "Respuestas", filas: h2, opciones: { anchoColumnas: [30, 14, 5, 12, 50, 11, 16, 50], congelar: { filas: 3, columnas: 0 } } },
+      { nombre: "Cálculos", filas: h3, opciones: { anchoColumnas: [30, 30, 24, 40, 70], congelar: { filas: 3, columnas: 0 } } },
+      { nombre: "Desenlaces y acciones", filas: h4, opciones: { anchoColumnas: [30, 12, 50, 22, 16], congelar: { filas: 3, columnas: 0 } } }
+    ];
+    if (sesiones && sesiones.length) {
+      const h5 = cabecera("Sesiones", ["Sesión", "Fecha", "Unidad", "Pregunta", "Artículos", "Decisión", "Conclusión"]);
+      sesiones.forEach(s => h5.push([T(s.titulo, "negrita"), T(fmtFecha(s.fecha), "centro"), T(s.unidad), T(s.pregunta), T(lecturasDeSesion(s, lecturas).map(nombreLectura).join("\n")), T(s.decision ? DECISIONES[s.decision].nom : "", ESTILO_DE[s.decision] || "centro"), T(s.conclusion)]));
+      hojas.push({ nombre: "Sesiones", filas: h5, opciones: { anchoColumnas: [30, 11, 18, 40, 44, 11, 50], congelar: { filas: 3, columnas: 0 } } });
+    }
+    return { estilos: ESTILOS_XLSX, hojas };
+  }
+
   // ---------- Saneado por esquema (lo que se carga o se importa nunca se usa sin pasar por aquí) ----------
   // [max] = texto; "id" = id propio; "ent" = entero ≥ 0; {en} = enumerado; {lista: max, max} = lista de textos;
   // {de: esquema, max} = lista de objetos; {obj: esquema} = objeto anidado; {mapa: esquema, max} = objeto con claves de pregunta
@@ -321,6 +508,9 @@
     accion: { id: "id", que: [800], quien: [200], cuando: [100] },
     entradaCalc: Object.fromEntries(CAMPOS_CALC.map(k => [k, [k === "unidad" ? 80 : 30]])),
     nivel: { nombre: [100], a: [12], b: [12] },
+    asistente: { id: "id", nombre: [120] },
+    club: { asistentes: { de: "asistente", max: 40 } },
+    sesion: { id: "id", titulo: [400], pregunta: [1200], unidad: [200], fecha: [20], lecturas: { lista: "ref", max: 50 }, conclusion: [4000], decision: { en: ["", "aplicar", "esperar", "descartar"] }, creado: [40], modificado: [40] },
     calculo: { id: "id", tipo: { en: TIPOS_CALC }, nombre: [300], entrada: { obj: "entradaCalc" }, niveles: { de: "nivel", max: 5 }, nota: [1500] },
     semaforos: { validez: COLOR_EN, resultados: COLOR_EN, aplicabilidad: COLOR_EN },
     motivos: { validez: [600], resultados: [600], aplicabilidad: [600] },
@@ -328,12 +518,12 @@
     lectura: { id: "id", titulo: [400], referencia: { obj: "referencia" }, pico: { obj: "pico" }, pregunta: [1200], filtro: { obj: "filtro" },
       plantilla: { en: ["", ...PL.PLANTILLAS.map(p => p.id)] }, plantillaVersion: "ent",
       respuestas: { mapa: "respuesta", max: 60 }, aparte: { mapa: "respuesta", max: 200 },
-      desenlaces: { de: "desenlace", max: 30 }, confusores: { de: "confusor", max: 30 }, calculos: { de: "calculo", max: 20 }, veredicto: { obj: "veredicto" },
+      desenlaces: { de: "desenlace", max: 30 }, confusores: { de: "confusor", max: 30 }, calculos: { de: "calculo", max: 20 }, veredicto: { obj: "veredicto" }, club: { obj: "club" }, resumen: [8000],
       notas: [4000], fecha: [20], creado: [40], modificado: [40] }
   };
   const FABRICA = {
     referencia: () => nuevaLectura("x").referencia, pico: () => nuevaLectura("x").pico, filtro: () => nuevaLectura("x").filtro,
-    entradaCalc: nuevaEntrada, nivel: nuevoNivel, calculo: id => nuevoCalculo(id, "tratamiento"),
+    entradaCalc: nuevaEntrada, nivel: nuevoNivel, asistente: id => nuevoAsistente(id), club: () => ({ asistentes: [], votos: {} }), sesion: id => nuevaSesion(id, ""), calculo: id => nuevoCalculo(id, "tratamiento"),
     respuesta: nuevaRespuesta, desenlace: nuevoDesenlace, confusor: nuevoConfusor, accion: nuevaAccion,
     semaforos: () => nuevoVeredicto().semaforo, motivos: () => nuevoVeredicto().motivoSemaforo, veredicto: nuevoVeredicto,
     lectura: id => nuevaLectura(id, "")
@@ -347,7 +537,7 @@
       else if (regla === "ent") { const n = Number(v); r[k] = Number.isInteger(n) && n >= 0 && n < 1e6 ? n : 0; }
       else if (Array.isArray(regla)) { if (v !== undefined) r[k] = txt(v, regla[0]); }
       else if (regla.en && !regla.lista) r[k] = regla.en.includes(v) ? v : r[k];
-      else if (regla.lista) r[k] = Array.isArray(v) ? [...new Set(v.slice(0, regla.max * 2).map(x => txt(x, regla.lista)).filter(Boolean))].slice(0, regla.max) : [];
+      else if (regla.lista) r[k] = Array.isArray(v) ? [...new Set(v.slice(0, regla.max * 2).map(x => regla.lista === "ref" ? (idValido(x) ? x : "") : txt(x, regla.lista)).filter(Boolean))].slice(0, regla.max) : [];
       else if (regla.de) r[k] = Array.isArray(v) ? v.slice(0, regla.max).map(x => sanear(regla.de, x, genId)).filter(Boolean) : [];
       else if (regla.obj) r[k] = sanear(regla.obj, v, genId) || r[k];
       else if (regla.mapa) {
@@ -365,17 +555,34 @@
     // Las respuestas que no son de la plantilla elegida van aparte
     const pre = PREFIJOS[l.plantilla];
     Object.keys(l.respuestas).forEach(id => { if (prefijo(id) !== pre) { l.aparte[id] = l.respuestas[id]; delete l.respuestas[id]; } });
+    // Votos del club: { idPregunta: { idAsistente: "si"|"no"|"nose" } }, solo de asistentes que existen
+    const ids = new Set(l.club.asistentes.map(a => a.id)), V = o.club && o.club.votos;
+    if (V && typeof V === "object" && !Array.isArray(V)) Object.keys(V).filter(idPregunta).slice(0, 80).forEach(q => {
+      const x = V[q]; if (!x || typeof x !== "object") return;
+      const limpio = {}; Object.keys(x).forEach(aid => { if (ids.has(aid) && ["si", "no", "nose"].includes(x[aid])) limpio[aid] = x[aid]; });
+      if (Object.keys(limpio).length) l.club.votos[q] = limpio;
+    });
     return l;
+  }
+  function sanearSesion(o, genId, fecha) {
+    const s = sanear("sesion", o, genId); if (!s) return null;
+    if (!s.creado) s.creado = fecha; if (!s.modificado) s.modificado = s.creado;
+    return s;
   }
   function sanearDatos(o, genId, fecha) {
     if (!o || typeof o !== "object" || !Array.isArray(o.lecturas)) return null;
-    return { lecturas: o.lecturas.slice(0, 1000).map(x => sanearLectura(x, genId, fecha)).filter(Boolean) };
+    const lecturas = o.lecturas.slice(0, 1000).map(x => sanearLectura(x, genId, fecha)).filter(Boolean), ids = new Set(lecturas.map(l => l.id));
+    const sesiones = (Array.isArray(o.sesiones) ? o.sesiones : []).slice(0, 300).map(x => sanearSesion(x, genId, fecha)).filter(Boolean);
+    sesiones.forEach(s => { s.lecturas = s.lecturas.filter(id => ids.has(id)); });
+    return { lecturas, sesiones };
   }
   // Fusiona sin duplicar: si un id ya existe se conserva el más reciente
   function fusionar(actual, nuevo) {
     const m = new Map(actual.lecturas.map(x => [x.id, x]));
     nuevo.lecturas.forEach(x => { const y = m.get(x.id); if (!y || String(x.modificado) > String(y.modificado)) m.set(x.id, x); });
-    return { lecturas: Array.from(m.values()) };
+    const ms = new Map((actual.sesiones || []).map(x => [x.id, x]));
+    (nuevo.sesiones || []).forEach(x => { const y = ms.get(x.id); if (!y || String(x.modificado) > String(y.modificado)) ms.set(x.id, x); });
+    return { lecturas: Array.from(m.values()), sesiones: Array.from(ms.values()) };
   }
 
   const API = {
@@ -389,7 +596,10 @@
     eliminacion, paradas, cerradaPronto, semaforoPropuesto, semaforo, decisionPropuesta,
     recorrerArbol, pareceDatoPaciente, preguntaSugerida, mensajeSugerido, avisos,
     progreso, pasoPendiente, resumen, nombreLectura, siguientePaso,
-    ESQ, sanear, sanearLectura, sanearDatos, fusionar
+    nuevoAsistente, ponerVoto, reparto, mayoria, discrepancia, nuevaSesion, lecturasDeSesion,
+    resultadoClave, FORMATO_INTERCAMBIO, VERSION_INTERCAMBIO, paqueteIntercambio, leerIntercambio, FILTROS_PUBMED, busquedaPubMed,
+    documentoFicha, documentoSesion, documentoPlantilla, ESTILOS_XLSX, hojasExcel, refTexto,
+    ESQ, sanear, sanearLectura, sanearSesion, sanearDatos, fusionar
   };
   if (typeof module !== "undefined" && module.exports) module.exports = API;
   else raiz.Logica = API;

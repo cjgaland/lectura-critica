@@ -12,9 +12,11 @@ Siete pasos:
 6. ¿Me sirve? En tus pacientes y en tu medio.
 7. Veredicto: semáforo por bloque y decisión (aplicar, esperar o descartar).
 
-- Ocho plantillas: ensayo clínico, revisión sistemática, diagnóstico, cohortes, casos y controles, cualitativo, evaluación económica y reglas de predicción clínica. Las preguntas y las pistas son propias; siguen los criterios de las plantillas de CASPe, que se citan y se enlazan (https://redcaspe.org/materiales/).
+- Nueve plantillas: las ocho de CASPe, con preguntas propias (ensayo clínico, revisión sistemática, diagnóstico, cohortes, casos y controles, cualitativo, evaluación económica y reglas de predicción clínica), que siguen sus criterios y las citan y enlazan (https://redcaspe.org/materiales/), y una propia para estudios antes-después o de mejora.
 - Si el estudio falla en las preguntas de eliminación, la app avisa de que no merece la pena seguir.
 - Calculadoras de resultados, en la pregunta donde se necesitan y sueltas: tratamiento (RR, RRR, RAR, NNT, OR, análisis de sensibilidad de las pérdidas), diagnóstico (sensibilidad, especificidad, cocientes de probabilidad, probabilidad tras la prueba y nomograma de Fagan), pruebas con varios niveles, odds ratio y coste-efectividad incremental. Comprobadas con las calculadoras Excel de CASPe.
+- Ficha de la lectura y de la sesión en Word y PDF, plantillas en blanco y Excel. Sesiones con varias lecturas y club de lectura con votos y modo proyector. Búsqueda en PubMed desde la pregunta.
+- **Aprende**, **Ponte a prueba**, **glosario**, un **ejemplo completo** (Urgencias, ficticio) y siete **minicasos**.
 
 Los datos se guardan solo en el dispositivo; para trabajar en equipo se comparte la copia de seguridad.
 
@@ -29,6 +31,7 @@ Tests de la lógica y de las calculadoras:
 
     node tests/logic.test.mjs
     node tests/calculos.test.mjs
+    node tests/contenido.test.mjs
 
 Documentación técnica y decisiones: ver `CLAUDE.md`.
 
