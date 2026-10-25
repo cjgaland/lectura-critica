@@ -7,7 +7,7 @@ Guía de referencia para el desarrollo asistido por IA. Léela antes de proponer
 ## 1. Descripción
 PWA estática (sin build, sin dependencias, sin CDN) para **leer críticamente un artículo** paso a paso y de forma didáctica: pregunta PICO y referencia, filtro de dos minutos, tipo de estudio, las tres preguntas de la lectura crítica (¿es válido?, ¿qué dice?, ¿me sirve?) con las **preguntas de eliminación primero**, y veredicto con semáforo y decisión (aplicar · esperar · descartar). Idea de Carlos. Acompaña al capítulo 26 de la Guía («Leer un artículo en diez minutos»).
 
-Es una **herramienta** del ecosistema (funciona sola). Hermana de Tamaño Muestral, Indicadores, Auditorías, AMFE, Flujograma, DAFO · CAME, Mapa de Riesgos y Rondas de Seguridad (enlazadas en «Acerca de»). En la portada enlaza Tamaño Muestral, el Normalizador Bibliográfico y el portal.
+Es una **herramienta** del ecosistema (funciona sola). Hermana de Tamaño Muestral, Indicadores, Auditorías, AMFE, Flujograma, DAFO · CAME, Mapa de Riesgos y Rondas de Seguridad (enlazadas en «Acerca de»). En la portada enlaza todas las hermanas, el Normalizador Bibliográfico y el portal.
 
 Autoría (idéntica en el pie de index.html, «Acerca de» y el README; orden alfabético, sin centro de trabajo): Carlos J. Galán Doval (Médico de Familia · Técnico en Calidad y Seguridad del Paciente) y Rafael J. Romero de Castilla Gil (Médico de Familia · Responsable del Área de Calidad y Seguridad del Paciente), Área de Gestión Sanitaria Sur de Córdoba · Andalucía.
 
