@@ -182,6 +182,27 @@ eq("Siguiente paso: la más reciente", L.siguientePaso({ lecturas: [l2, l] }).hr
   eq("Saneado de calculadoras", [s.calculos.length, s.calculos[0].tipo, s.calculos[1].entrada.a, "z" in s.calculos[1].entrada, s.calculos[1].niveles.length], [2, "tratamiento", "90", false, 1]);
 }
 
+// ---------- Fase 2: metaanálisis, supervivencia y kappa guardados con la lectura ----------
+{
+  const lr = L.nuevaLectura("lr", ""); L.cambiarPlantilla(lr, "revision");
+  const q6 = L.preguntasDe(L.plantilla("revision")).find(q => q.id === "rs-6");
+  const m = L.nuevoCalculo("m1", "metaanalisis");
+  eq("Metaanálisis nuevo: tres estudios, OR y Mantel-Haenszel", [m.estudios.length, m.entrada.medida, m.entrada.metodo], [3, "or", "mh"]);
+  [[5, 100, 25, 100], [40, 200, 42, 200], [10, 80, 30, 80], [60, 300, 62, 300], [3, 50, 15, 50]].forEach((f, i) => { m.estudios[i] = Object.assign(L.nuevoEstudio(), { nombre: "E" + (i + 1), ee: String(f[0]), ne: String(f[1]), ec: String(f[2]), nc: String(f[3]) }); });
+  lr.calculos.push(m);
+  t("La pregunta 6 de la revisión queda contestada con el metaanálisis", L.contestada(lr, q6));
+  eq("Semáforo desde el metaanálisis (heterogéneo)", L.semaforoPropuesto(lr, "resultados").color, "ambar");
+  t("Texto y resultado clave del metaanálisis", /5 estudios/.test(L.textoCalculo(m)) && L.resultadoClave(lr).medida === "OR");
+  const lc = L.nuevaLectura("lc2", ""); L.cambiarPlantilla(lc, "ensayo");
+  const s = L.nuevoCalculo("s1", "supervivencia"); Object.assign(s.entrada, { hr: "0,7", li: "0,55", ls: "0,89" }); lc.calculos.push(s);
+  t("Supervivencia en el ensayo: contesta la 7", L.contestada(lc, L.preguntasDe(L.plantilla("ensayo")).find(q => q.id === "ec-7")) && L.resultadoClave(lc).medida === "HR");
+  const k = L.nuevoCalculo("k1", "kappa"); k.matriz = [["40", "10"], ["5", "45"]];
+  t("Kappa: texto", /Kappa 0,7/.test(L.textoCalculo(k)));
+  const sa = L.sanearLectura({ id: "x", calculos: [{ id: "c1", tipo: "metaanalisis", estudios: [{ nombre: "A", ee: 3, raro: 1 }, "x"], matriz: [["1", "2"], ["3"]] }, { id: "c2", tipo: "kappa", matriz: [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["no"]] }] }, gid, "");
+  eq("Saneado: estudios", [sa.calculos[0].estudios.length, sa.calculos[0].estudios[0].ee, "raro" in sa.calculos[0].estudios[0]], [1, "3", false]);
+  eq("Saneado: tabla cuadrada", [sa.calculos[0].matriz, sa.calculos[1].matriz.length], [[["1", "2"], ["3", ""]], 4]);
+}
+
 // ---------- Club de lectura ----------
 {
   const lv = L.nuevaLectura("lv", "2026-10-26");

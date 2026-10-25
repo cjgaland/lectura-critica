@@ -14,7 +14,7 @@ Siete pasos:
 
 - Nueve plantillas: las ocho de CASPe, con preguntas propias (ensayo clínico, revisión sistemática, diagnóstico, cohortes, casos y controles, cualitativo, evaluación económica y reglas de predicción clínica), que siguen sus criterios y las citan y enlazan (https://redcaspe.org/materiales/), y una propia para estudios antes-después o de mejora.
 - Si el estudio falla en las preguntas de eliminación, la app avisa de que no merece la pena seguir.
-- Calculadoras de resultados, en la pregunta donde se necesitan y sueltas: tratamiento (RR, RRR, RAR, NNT, OR, análisis de sensibilidad de las pérdidas), diagnóstico (sensibilidad, especificidad, cocientes de probabilidad, probabilidad tras la prueba y nomograma de Fagan), pruebas con varios niveles, odds ratio y coste-efectividad incremental. Comprobadas con las calculadoras Excel de CASPe.
+- Calculadoras de resultados, en la pregunta donde se necesitan y sueltas: tratamiento (RR, RRR, RAR, NNT, OR, análisis de sensibilidad de las pérdidas), diagnóstico (sensibilidad, especificidad, cocientes de probabilidad, probabilidad tras la prueba y nomograma de Fagan), pruebas con varios niveles, odds ratio, coste-efectividad incremental, supervivencia (hazard ratio), metaanálisis con diagrama de bosque y embudo, umbrales de decisión y kappa. Comprobadas con las calculadoras Excel de CASPe.
 - Ficha de la lectura y de la sesión en Word y PDF, plantillas en blanco y Excel. Sesiones con varias lecturas y club de lectura con votos y modo proyector. Búsqueda en PubMed desde la pregunta.
 - **Aprende**, **Ponte a prueba**, **glosario**, un **ejemplo completo** (Urgencias, ficticio) y siete **minicasos**.
 

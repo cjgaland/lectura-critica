@@ -28,6 +28,9 @@
   }
   // Una probabilidad o proporción: «30», «30 %» y «0,3» valen lo mismo (más de 1 se entiende como porcentaje)
   const prob = v => { const n = num(v); return n > 1 ? n / 100 : n; };
+  // Lo que la app pide «en %» se lee siempre como porcentaje («1» = 1 %, no 100 %)
+  const porc = v => { const n = num(String(v == null ? "" : v).replace("%", "")); return ok(n) ? n / 100 : NaN; };
+  const CAMPOS_PORC = ["pre", "umbral", "s", "e", "peer", "dano", "rprueba", "beneficio"];
   const entero = v => { const n = num(v); return Number.isInteger(n) && n >= 0 ? n : NaN; };
   const ok = x => typeof x === "number" && isFinite(x);
   // Redondeo como ROUND de Excel (la mitad, lejos del cero)
@@ -310,6 +313,17 @@
       if (r.or.sup / r.or.inf > 6) return { color: "ambar", motivo: "Asociación con un intervalo muy ancho (imprecisa)." };
       return { color: "verde", motivo: `Asociación clara: OR ${fmt(r.or.v)} (${icTxt(r.or)}).` };
     }
+    if (tipo === "supervivencia") {
+      if (incluye(r.hr, 1)) return { color: "ambar", motivo: "El intervalo del hazard ratio incluye el 1." };
+      if (r.hr.sup / r.hr.inf > 4) return { color: "ambar", motivo: "Hay efecto, pero el intervalo del hazard ratio es muy ancho." };
+      return { color: "verde", motivo: `Efecto claro: HR ${fmt(r.hr.v)} (${icTxt(r.hr)}).` };
+    }
+    if (tipo === "metaanalisis") {
+      const A = r.aleatorio;
+      if (A.inf <= r.nula && r.nula <= A.sup) return { color: r.k >= 10 && r.i2 < 0.25 ? "rojo" : "ambar", motivo: "El intervalo del efecto combinado (efectos aleatorios) incluye el «sin efecto»." };
+      if (r.i2 > 0.5) return { color: "ambar", motivo: `Hay efecto, pero los estudios discrepan mucho (I² ${pct(r.i2, 0)}).` };
+      return { color: "verde", motivo: `Efecto combinado claro y estudios coherentes (I² ${pct(r.i2, 0)}).` };
+    }
     if (tipo === "diagnostico") {
       const fp = !incluye(r.lrp, 1) ? lrFuerza(r.lrp.v) : "casi nulo", fn = !incluye(r.lrn, 1) ? lrFuerza(r.lrn.v) : "casi nulo";
       if ([fp, fn].some(f => f === "grande" || f === "moderado")) return { color: "verde", motivo: `Cocientes de probabilidad útiles: LR+ ${fmt(r.lrp.v)}, LR− ${fmt(r.lrn.v)}.` };
@@ -319,14 +333,242 @@
     return null;
   }
 
+  // ============================================================
+  //  Fase 2: distribuciones, supervivencia, metaanálisis, umbrales y kappa
+  // ============================================================
+
+  // ---------- Distribuciones (p de Q, de Egger y del log-rank) ----------
+  function lnGamma(x) {
+    const g = [676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+    if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - lnGamma(1 - x);
+    x -= 1; let a = 0.99999999999980993; const t = x + 7.5;
+    g.forEach((c, i) => { a += c / (x + i + 1); });
+    return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
+  }
+  // Gamma incompleta regularizada superior Q(a, x) (series y fracción continua)
+  function gammaQ(a, x) {
+    if (x <= 0) return 1;
+    if (x < a + 1) { let s = 1 / a, d = s, ap = a; for (let n = 0; n < 500; n++) { ap++; d *= x / ap; s += d; if (Math.abs(d) < Math.abs(s) * 1e-16) break; } return 1 - s * Math.exp(-x + a * Math.log(x) - lnGamma(a)); }
+    let b = x + 1 - a, c = 1e300, d = 1 / b, h = d;
+    for (let i = 1; i < 500; i++) { const an = -i * (i - a); b += 2; d = an * d + b; if (Math.abs(d) < 1e-300) d = 1e-300; c = b + an / c; if (Math.abs(c) < 1e-300) c = 1e-300; d = 1 / d; const del = d * c; h *= del; if (Math.abs(del - 1) < 1e-16) break; }
+    return Math.exp(-x + a * Math.log(x) - lnGamma(a)) * h;
+  }
+  const pNormal2 = z => gammaQ(0.5, z * z / 2);               // p bilateral de una z
+  const chi2Sup = (x, gl) => gammaQ(gl / 2, x / 2);           // p de una ji cuadrado
+  // Inversa de la normal (Acklam, con un paso de Newton)
+  function normInv(p) {
+    if (!(p > 0 && p < 1)) return NaN;
+    const a = [-39.69683028665376, 220.9460984245205, -275.9285104469687, 138.357751867269, -30.66479806614716, 2.506628277459239], b = [-54.47609879822406, 161.5858368580409, -155.6989798598866, 66.80131188771972, -13.28068155288572], c = [-0.007784894002430293, -0.3223964580411365, -2.400758277161838, -2.549732539343734, 4.374664141464968, 2.938163982698783], d = [0.007784695709041462, 0.3224671290700398, 2.445134137142996, 3.754408661907416];
+    let q, x;
+    if (p < 0.02425) { q = Math.sqrt(-2 * Math.log(p)); x = (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1); }
+    else if (p > 1 - 0.02425) { q = Math.sqrt(-2 * Math.log(1 - p)); x = -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1); }
+    else { q = p - 0.5; const r = q * q; x = (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1); }
+    const e = (x < 0 ? pNormal2(x) / 2 : 1 - pNormal2(x) / 2) - p;
+    return x - e * Math.sqrt(2 * Math.PI) * Math.exp(x * x / 2);
+  }
+  // Beta incompleta regularizada (fracción continua) y t de Student
+  function betaInc(a, b, x) {
+    if (x <= 0) return 0; if (x >= 1) return 1;
+    const lbt = lnGamma(a + b) - lnGamma(a) - lnGamma(b) + a * Math.log(x) + b * Math.log(1 - x);
+    const cf = (a, b, x) => { let qab = a + b, qap = a + 1, qam = a - 1, c = 1, d = 1 - qab * x / qap; if (Math.abs(d) < 1e-300) d = 1e-300; d = 1 / d; let h = d;
+      for (let m = 1; m < 500; m++) { const m2 = 2 * m; let aa = m * (b - m) * x / ((qam + m2) * (a + m2)); d = 1 + aa * d; if (Math.abs(d) < 1e-300) d = 1e-300; c = 1 + aa / c; if (Math.abs(c) < 1e-300) c = 1e-300; d = 1 / d; h *= d * c;
+        aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2)); d = 1 + aa * d; if (Math.abs(d) < 1e-300) d = 1e-300; c = 1 + aa / c; if (Math.abs(c) < 1e-300) c = 1e-300; d = 1 / d; const del = d * c; h *= del; if (Math.abs(del - 1) < 1e-16) break; }
+      return h; };
+    return x < (a + 1) / (a + b + 2) ? Math.exp(lbt) * cf(a, b, x) / a : 1 - Math.exp(lbt) * cf(b, a, 1 - x) / b;
+  }
+  const tSup2 = (t, gl) => betaInc(gl / 2, 0.5, gl / (gl + t * t));   // p bilateral de una t
+  function tInv2(p, gl) { let lo = 0, hi = 1e4; for (let i = 0; i < 200; i++) { const m = (lo + hi) / 2; if (tSup2(m, gl) > p) lo = m; else hi = m; } return (lo + hi) / 2; }
+
+  // ---------- Supervivencia de un estudio: el HR y su varianza (Parmar 1998, como MetaSurv) ----------
+  // modo: ic (HR e IC) · oev (O − E y varianza log-rank) · obsesp (observados y esperados) · logrank (p del log-rank y eventos) · medianas · riesgo (eventos y sin evento en un instante t)
+  const MODOS_SUPERV = {
+    ic: "El HR y su intervalo de confianza", oev: "O − E y la varianza del log-rank", obsesp: "Eventos observados y esperados en cada grupo",
+    logrank: "La p del log-rank y los eventos", medianas: "Las medianas de supervivencia", riesgo: "Eventos y sujetos sin evento en un momento t"
+  };
+  function supervivencia(e) {
+    const n = k => num(e[k]), r = { ok: false, errores: [] }, modo = e.modo || "ic";
+    let ln = NaN, v = NaN;
+    if (modo === "ic") { const hr = n("hr"), li = n("li"), ls = n("ls"); if (hr > 0 && li > 0 && ls > li) { ln = Math.log(hr); v = Math.pow((Math.log(ls) - Math.log(li)) / (2 * Z), 2); } }
+    else if (modo === "oev") { const oe = n("oe"), V = n("v"); if (ok(oe) && V > 0) { ln = oe / V; v = 1 / V; } }
+    else if (modo === "obsesp") { const Oe = n("oe1"), Ee = n("ee1"), Oc = n("oc1"), Ec = n("ec1"); if ([Oe, Ee, Oc, Ec].every(x => x > 0)) { ln = Math.log((Oe / Ee) / (Oc / Ec)); v = 1 / Ee + 1 / Ec; } }
+    else if (modo === "logrank") {
+      const ev1 = n("ev1"), ev2 = n("ev2"), evt = n("evt"), n1 = n("n1"), n2 = n("n2"), p = n("p"), sg = e.sentido === "contra" ? 1 : -1;
+      if (p > 0 && p < 1) {
+        const z = Math.abs(normInv(p / 2));
+        let V = NaN, oe = NaN;
+        if (ev1 > 0 && ev2 > 0) { V = ev1 * ev2 / (ev1 + ev2); oe = Math.sqrt(V) * z; }
+        else if (evt > 0 && n1 > 0 && n2 > 0) { V = evt * n1 * n2 / Math.pow(n1 + n2, 2); oe = Math.sqrt(evt * n1 * n2) / (n1 + n2) * z; }
+        else if (evt > 0) { V = evt / 4; oe = Math.sqrt(evt) * z / 2; }
+        if (V > 0) { ln = sg * oe / V; v = 1 / V; r.oe = sg * oe; }
+      }
+    }
+    else if (modo === "medianas") { const m1 = n("m1"), m2 = n("m2"), ev1 = n("ev1"), ev2 = n("ev2"); if ([m1, m2, ev1, ev2].every(x => x > 0)) { ln = Math.log(m2 / m1); v = 1 / ev1 + 1 / ev2; } }
+    else if (modo === "riesgo") {
+      const a = n("e1"), b = n("s1"), c = n("e2"), d = n("s2"), N = a + b + c + d;
+      if ([a, b, c, d].every(x => x >= 0) && N > 1 && a + c > 0) { const V = (a + b) * (c + d) * (a + c) * (b + d) / (N * N * (N - 1)); if (V > 0) { ln = (a - (a + b) * (a + c) / N) / V; v = 1 / V; } }
+    }
+    if (!ok(ln) || !(v > 0)) { r.errores.push("Completa los datos del método elegido (números positivos)."); return r; }
+    const se = Math.sqrt(v);
+    return { ok: true, modo, lnhr: ln, var: v, hr: { v: Math.exp(ln), inf: Math.exp(ln - Z * se), sup: Math.exp(ln + Z * se) }, z: Math.abs(ln / se), p: pNormal2(ln / se), oe: r.oe };
+  }
+  const textoSupervivencia = r => !r || !r.ok ? "" : `Hazard ratio ${fmt(r.hr.v)} (IC 95 %: ${icTxt(r.hr)}): en cada momento, el riesgo de tener el evento es ${r.hr.v < 1 ? `un ${pct(1 - r.hr.v, 0)} menor` : `un ${pct(r.hr.v - 1, 0)} mayor`} con la intervención${incluye(r.hr, 1) ? ", pero el intervalo incluye el 1: podría no haber diferencia" : ""}.`;
+
+  // ---------- Metaanálisis ----------
+  // datos: dic (eventos y totales) · hr (HR e IC de cada estudio) · cont (n, media y DE de cada grupo)
+  // medida: dic → or | rr | dr ; cont → dm | hedges | cohen | glass ; hr → hr.  metodo (dic): mh | iv | peto
+  const MEDIDAS_META = {
+    or: { nom: "Odds ratio", log: true, datos: "dic" }, rr: { nom: "Riesgo relativo", log: true, datos: "dic" }, dr: { nom: "Diferencia de riesgos", log: false, datos: "dic" },
+    hr: { nom: "Hazard ratio", log: true, datos: "hr" },
+    dm: { nom: "Diferencia de medias", log: false, datos: "cont" }, hedges: { nom: "Diferencia estandarizada (g de Hedges)", log: false, datos: "cont" },
+    cohen: { nom: "Diferencia estandarizada (d de Cohen)", log: false, datos: "cont" }, glass: { nom: "Diferencia estandarizada (Δ de Glass)", log: false, datos: "cont" }
+  };
+  const METODOS_META = { mh: "Mantel-Haenszel", iv: "Inverso de la varianza", peto: "Peto" };
+  // Intervalo de I² (Higgins y Thompson 2002, como los Excel, pero con la condición Q > k bien puesta)
+  function i2Intervalo(Q, k) {
+    const gl = k - 1; if (gl < 1 || !(Q > 0)) return { i2: 0, inf: 0, sup: 0, H: NaN };
+    const H = Math.sqrt(Q / gl);
+    const se = Q > k ? 0.5 * (Math.log(Q) - Math.log(gl)) / (Math.sqrt(2 * Q) - Math.sqrt(2 * k - 3)) : (k > 2 ? Math.sqrt((1 / (2 * (k - 2))) * (1 - 1 / (3 * Math.pow(k - 2, 2)))) : NaN);
+    const i2 = h => Math.max(0, (h * h - 1) / (h * h));
+    return { i2: Math.max(0, (Q - gl) / Q), inf: ok(se) ? i2(Math.exp(Math.log(H) - Z * se)) : NaN, sup: ok(se) ? i2(Math.exp(Math.log(H) + Z * se)) : NaN, H, seLnH: se };
+  }
+  // Egger: regresión de z = θ/ee sobre la precisión 1/ee; el intercepto mide la asimetría del embudo
+  function egger(th, se) {
+    const k = th.length; if (k < 3) return null;
+    const x = se.map(s => 1 / s), y = th.map((t, i) => t / se[i]);
+    const mx = x.reduce((a, b) => a + b, 0) / k, my = y.reduce((a, b) => a + b, 0) / k;
+    const sxx = x.reduce((a, xi) => a + (xi - mx) * (xi - mx), 0), sxy = x.reduce((a, xi, i) => a + (xi - mx) * (y[i] - my), 0);
+    const b1 = sxy / sxx, b0 = my - b1 * mx, ssr = y.reduce((a, yi, i) => a + Math.pow(yi - b0 - b1 * x[i], 2), 0);
+    const s2 = ssr / (k - 2), eeB0 = Math.sqrt(s2 * (1 / k + mx * mx / sxx)), t = b0 / eeB0, gl = k - 2, tc = tInv2(0.1, gl);
+    return { b0, b1, eeB0, t, p: tSup2(Math.abs(t), gl), inf90: b0 - tc * eeB0, sup90: b0 + tc * eeB0, gl };
+  }
+  function metaanalisis(e) {
+    const r = { ok: false, errores: [] }, medida = MEDIDAS_META[e.medida] ? e.medida : "or", M = MEDIDAS_META[medida], datos = M.datos;
+    const metodo = datos === "dic" ? (medida === "or" ? (METODOS_META[e.metodo] ? e.metodo : "mh") : (e.metodo === "iv" ? "iv" : "mh")) : "iv";
+    const E = [];
+    (e.estudios || []).forEach((s, i) => {
+      const n = k => num(s[k]), nombre = s.nombre || `Estudio ${i + 1}`;
+      if (datos === "dic") {
+        let a = entero(s.ee), n1 = entero(s.ne), c = entero(s.ec), n2 = entero(s.nc);
+        if (![a, n1, c, n2].every(ok) || !n1 || !n2 || a > n1 || c > n2) return;
+        let b = n1 - a, d = n2 - c, cero = false;
+        const N = n1 + n2, o = { nombre, a, b, c, d, n1, n2, N };
+        // Corrección de 0,5 en ese estudio si una celda es 0 (no para la diferencia de riesgos ni para Peto)
+        if (medida !== "dr" && metodo !== "peto" && [a, b, c, d].includes(0)) { cero = true; a += 0.5; b += 0.5; c += 0.5; d += 0.5; }
+        const m1 = a + b, m2 = c + d;
+        if (metodo === "peto") { const Ex = n1 * (o.a + o.c) / N, V = n1 * n2 * (o.a + o.c) * (o.b + o.d) / (N * N * (N - 1)); if (!(V > 0)) return; Object.assign(o, { th: (o.a - Ex) / V, v: 1 / V, peto: { oe: o.a - Ex, V } }); }
+        else if (medida === "or") { if (!(a > 0 && b > 0 && c > 0 && d > 0)) return; Object.assign(o, { th: Math.log(a * d / (b * c)), v: 1 / a + 1 / b + 1 / c + 1 / d }); }
+        else if (medida === "rr") { if (!(a > 0 && c > 0)) return; Object.assign(o, { th: Math.log((a / m1) / (c / m2)), v: 1 / a - 1 / m1 + 1 / c - 1 / m2 }); }
+        else { const v = a * b / Math.pow(n1, 3) + c * d / Math.pow(n2, 3); if (!(v > 0)) return; Object.assign(o, { th: a / n1 - c / n2, v }); }
+        o.cero = cero; E.push(o);
+      } else if (datos === "hr") {
+        // Con el HR y su IC, o con el HR y la varianza de su logaritmo (como MetaSurv)
+        const hr = n("hr"), li = n("li"), ls = n("ls"), v0 = n("v");
+        if (hr > 0 && v0 > 0) E.push({ nombre, th: Math.log(hr), v: v0 });
+        else if (hr > 0 && li > 0 && ls > li) E.push({ nombre, th: Math.log(hr), v: Math.pow((Math.log(ls) - Math.log(li)) / (2 * Z), 2) });
+      } else {
+        const n1 = n("n1"), m1 = n("m1"), s1 = n("d1"), n2 = n("n2"), m2 = n("m2"), s2 = n("d2");
+        if (![n1, m1, s1, n2, m2, s2].every(ok) || !(n1 > 1 && n2 > 1 && s1 > 0 && s2 > 0)) return;
+        const sp = Math.sqrt(((n1 - 1) * s1 * s1 + (n2 - 1) * s2 * s2) / (n1 + n2 - 2)), base = (n1 + n2) / (n1 * n2);
+        let th, v;
+        if (medida === "dm") { th = m1 - m2; v = s1 * s1 / n1 + s2 * s2 / n2; }
+        else if (medida === "hedges") { th = (m1 - m2) / sp * (1 - 3 / (4 * (n1 + n2) - 9)); v = base + th * th / (2 * (n1 + n2 - 3.94)); }
+        else if (medida === "cohen") { th = (m1 - m2) / sp; v = base + th * th / (2 * (n1 + n2 - 2)); }
+        else { th = (m1 - m2) / s2; v = base + th * th / (2 * (n2 - 1)); }
+        E.push({ nombre, th, v });
+      }
+    });
+    if (E.length < 2) { r.errores.push("Hacen falta al menos dos estudios completos."); return r; }
+    const k = E.length, sum = f => E.reduce((s, x) => s + f(x), 0), w = x => 1 / x.v;
+    // Efectos fijos según el método
+    let fTh, fSe;
+    if (metodo === "peto") { const SV = sum(x => x.peto.V); fTh = sum(x => x.peto.oe) / SV; fSe = 1 / Math.sqrt(SV); }
+    else if (metodo === "mh" && medida === "or") {
+      const R = x => x.a * x.d / x.N, S = x => x.b * x.c / x.N, P = x => (x.a + x.d) / x.N, Qq = x => (x.b + x.c) / x.N, SR = sum(R), SS = sum(S);
+      fTh = Math.log(SR / SS); fSe = Math.sqrt((sum(x => P(x) * R(x)) / (SR * SR) + sum(x => P(x) * S(x) + Qq(x) * R(x)) / (SR * SS) + sum(x => Qq(x) * S(x)) / (SS * SS)) / 2);
+    } else if (metodo === "mh" && medida === "rr") {
+      const R = x => x.a * x.n2 / x.N, S = x => x.c * x.n1 / x.N, P = x => (x.n1 * x.n2 * (x.a + x.c) - x.a * x.c * x.N) / (x.N * x.N);
+      fTh = Math.log(sum(R) / sum(S)); fSe = Math.sqrt(sum(P) / (sum(R) * sum(S)));
+    } else if (metodo === "mh" && medida === "dr") {
+      const W = x => x.n1 * x.n2 / x.N, P = x => (x.a * x.b * Math.pow(x.n2, 3) + x.c * x.d * Math.pow(x.n1, 3)) / (x.n1 * x.n2 * x.N * x.N), SW = sum(W);
+      fTh = sum(x => x.th * W(x)) / SW; fSe = Math.sqrt(sum(P) / (SW * SW));
+    } else { fTh = sum(x => w(x) * x.th) / sum(w); fSe = 1 / Math.sqrt(sum(w)); }
+    // Heterogeneidad (Peto: con sus pesos V; el resto, inverso de la varianza alrededor del efecto fijo)
+    const Q = metodo === "peto" ? sum(x => x.peto.V * (x.th * x.th - fTh * fTh)) : sum(x => w(x) * Math.pow(x.th - fTh, 2)), gl = k - 1;
+    const SW = sum(w), SW2 = sum(x => w(x) * w(x)), tau2 = Math.max(0, (Q - gl) / (SW - SW2 / SW));
+    const wr = x => 1 / (x.v + tau2), rTh = sum(x => wr(x) * x.th) / sum(wr), rSe = 1 / Math.sqrt(sum(wr));
+    const nat = M.log ? Math.exp : (x => x), iv = (t, s) => ({ v: nat(t), inf: nat(t - Z * s), sup: nat(t + Z * s), z: Math.abs(t / s), p: pNormal2(t / s), th: t, se: s });
+    const pesoF = metodo === "peto" ? (x => x.peto.V / sum(y => y.peto.V)) : metodo === "mh" && medida === "or" ? (x => (x.b * x.c / x.N) / sum(y => y.b * y.c / y.N)) : metodo === "mh" && medida === "rr" ? (x => (x.c * x.n1 / x.N) / sum(y => y.c * y.n1 / y.N)) : metodo === "mh" && medida === "dr" ? (x => (x.n1 * x.n2 / x.N) / sum(y => y.n1 * y.n2 / y.N)) : (x => w(x) / SW);
+    const ic2 = i2Intervalo(Q, k);
+    Object.assign(r, {
+      ok: true, k, medida, metodo, datos, log: M.log, nula: M.log ? 1 : 0,
+      estudios: E.map(x => Object.assign({ nombre: x.nombre, cero: !!x.cero, peso: pesoF(x), pesoAl: wr(x) / sum(wr) }, iv(x.th, Math.sqrt(x.v)))),
+      fijo: iv(fTh, fSe), aleatorio: iv(rTh, rSe), q: Q, gl, pQ: chi2Sup(Q, gl), tau2, i2: ic2.i2, i2Inf: ic2.inf, i2Sup: ic2.sup,
+      egger: egger(E.map(x => x.th), E.map(x => Math.sqrt(x.v)))
+    });
+    return r;
+  }
+  function textoMeta(r) {
+    if (!r || !r.ok) return "";
+    const M = MEDIDAS_META[r.medida], A = r.aleatorio, F = r.fijo, f = M.log || r.medida === "dr" ? (x => fmt(x)) : (x => fmt(x, 2));
+    let t = `${r.k} estudios. ${M.nom} combinada: ${f(A.v)} (IC 95 %: ${f(A.inf)} a ${f(A.sup)}) con efectos aleatorios; ${f(F.v)} (${f(F.inf)} a ${f(F.sup)}) con efectos fijos. `;
+    t += `Heterogeneidad: I² ${pct(r.i2, 0)}${ok(r.i2Inf) ? ` (IC 95 %: ${pct(r.i2Inf, 0)} a ${pct(r.i2Sup, 0)})` : ""}, Q ${fmt(r.q, 1)} con ${r.gl} gl (p ${r.pQ < 0.001 ? "< 0,001" : "= " + fmt(r.pQ, 3)}).`;
+    if (r.egger) t += ` Egger: p = ${fmt(r.egger.p, 2)}.`;
+    return t;
+  }
+  function trampasMeta(r) {
+    const a = []; if (!r || !r.ok) return a;
+    const A = r.aleatorio, nula = r.nula;
+    if (A.inf <= nula && nula <= A.sup) a.push({ nivel: "aviso", texto: "El intervalo del efecto combinado incluye el «sin efecto»: el resultado es compatible con que no haya efecto." });
+    if (r.i2 > 0.5) a.push({ nivel: "aviso", texto: `Heterogeneidad alta (I² ${pct(r.i2, 0)}): los estudios no dicen lo mismo. ¿Tenía sentido combinarlos? Busca por qué difieren (pacientes, dosis, calidad).` });
+    if (r.k < 5) a.push({ nivel: "nota", texto: "Con menos de 5 estudios, la heterogeneidad y el sesgo de publicación se estiman muy mal." });
+    else if (r.egger && r.egger.p < 0.1) a.push({ nivel: "aviso", texto: `La prueba de Egger sugiere asimetría en el embudo (p = ${fmt(r.egger.p, 2)}): puede haber sesgo de publicación (faltan estudios pequeños sin efecto).` });
+    if (r.estudios.some(x => x.cero)) a.push({ nivel: "nota", texto: "Algún estudio tiene una casilla con 0: se le suma 0,5 a sus cuatro casillas." });
+    return a;
+  }
+
+  // ---------- Umbrales de decisión (Pauker y Kassirer; como la hoja «Tabla 2x2» del Excel) ----------
+  // dano: riesgo de tratar a quien no tiene la enfermedad · rprueba: riesgo de la prueba · beneficio: beneficio de tratar a quien la tiene
+  function umbrales(e) {
+    const S = prob(e.s), Es = prob(e.e), R = prob(e.dano), Rt = prob(e.rprueba), B = prob(e.beneficio), pre = prob(e.pre), r = { ok: false, errores: [] };
+    if (![S, Es, R, Rt, B].every(x => ok(x) && x >= 0) || !(S > 0 && S <= 1 && Es > 0 && Es <= 1) || !(B > 0)) { r.errores.push("Escribe la sensibilidad, la especificidad y los tres riesgos y beneficios, en %."); return r; }
+    const dx = ((1 - Es) * R + Rt) / ((1 - Es) * R + S * B), tx = (Es * R - Rt) / (Es * R + (1 - S) * B);
+    const decision = !(pre >= 0 && pre <= 1) ? "" : pre < dx ? "noprueba" : pre > tx ? "tratar" : "prueba";
+    return { ok: true, dx, tx, pre, decision, util: dx < tx };
+  }
+  const DECISION_UMBRAL = { noprueba: "No hacer la prueba y no tratar: la probabilidad está por debajo del umbral diagnóstico.", prueba: "Hacer la prueba y tratar o no según su resultado.", tratar: "Tratar sin hacer la prueba: la probabilidad ya supera el umbral terapéutico." };
+
+  // ---------- Concordancia: índice kappa (como la hoja «Kappa» del Excel) ----------
+  // m: tabla k × k (observador 1 en filas, observador 2 en columnas). Ponderación lineal 1 − |i − j| / (k − 1)
+  function kappa(m) {
+    const r = { ok: false, errores: [] }, T = (m || []).map(f => (f || []).map(x => entero(x)));
+    const k = T.length;
+    if (k < 2 || T.some(f => f.length !== k || f.some(x => !ok(x)))) { r.errores.push("Completa la tabla con números enteros."); return r; }
+    const N = T.reduce((s, f) => s + f.reduce((a, b) => a + b, 0), 0); if (!N) { r.errores.push("La tabla está vacía."); return r; }
+    const fi = T.map(f => f.reduce((a, b) => a + b, 0)), co = T[0].map((_, j) => T.reduce((s, f) => s + f[j], 0));
+    const po = T.reduce((s, f, i) => s + f[i], 0) / N, pe = fi.reduce((s, x, i) => s + x * co[i], 0) / (N * N), kp = (po - pe) / (1 - pe);
+    const se = Math.sqrt(po * (1 - po) / (N * Math.pow(1 - pe, 2)));
+    const W = (i, j) => 1 - Math.abs(i - j) / (k - 1);
+    let poW = 0, peW = 0; T.forEach((f, i) => f.forEach((x, j) => { poW += W(i, j) * x / N; peW += W(i, j) * fi[i] * co[j] / (N * N); }));
+    return { ok: true, k, n: N, po, pe, kappa: { v: kp, inf: kp - Z * se, sup: kp + Z * se }, poW, peW, kappaW: (poW - peW) / (1 - peW) };
+  }
+  // Landis y Koch
+  const kappaFuerza = v => !ok(v) ? "" : v < 0 ? "peor que el azar" : v <= 0.2 ? "insignificante" : v <= 0.4 ? "débil" : v <= 0.6 ? "moderada" : v <= 0.8 ? "buena" : "muy buena";
+
   // ---------- Qué calcula cada calculadora ----------
-  function calcular(tipo, e) {
+  // Desde la app: los campos «en %» se convierten antes (las funciones aceptan también proporciones, para los tests)
+  function calcular(tipo, e0) {
+    const e = Object.assign({}, e0);
+    CAMPOS_PORC.forEach(k => { if (e[k] != null && String(e[k]).trim() !== "") e[k] = porc(e[k]); });
     if (tipo === "tratamiento") return tratamiento(e);
     if (tipo === "or") return oddsRatio(e);
     if (tipo === "diagnostico") return diagnostico(e);
     if (tipo === "niveles") return niveles(e.niveles, e.pre);
     if (tipo === "bayes") return desdeSE(e);
     if (tipo === "cei") return cei(e);
+    if (tipo === "supervivencia") return supervivencia(e);
+    if (tipo === "metaanalisis") return metaanalisis(e);
+    if (tipo === "umbrales") return umbrales(e);
+    if (tipo === "kappa") return kappa(e.matriz);
     return { ok: false, errores: [] };
   }
   const CALCS = {
@@ -335,21 +577,30 @@
     niveles: { nom: "Varios niveles", titulo: "Pruebas con varios niveles", que: "Cuando la prueba no da solo positivo o negativo (una escala, varios puntos de corte): un cociente de probabilidad para cada nivel.", campos: ["pre"] },
     bayes: { nom: "Desde S y E", titulo: "Probabilidad tras la prueba desde la sensibilidad y la especificidad", que: "Cuando el artículo solo da la sensibilidad y la especificidad, con tu probabilidad previa y el nomograma de Fagan.", campos: ["s", "e", "pre", "umbral"] },
     or: { nom: "Odds ratio", titulo: "Odds ratio de casos y controles", que: "Estudios de casos y controles: la fuerza de la asociación entre la exposición y el desenlace.", campos: ["a", "b", "c", "d"] },
+    supervivencia: { nom: "Supervivencia", titulo: "Hazard ratio de un estudio", que: "Curvas de supervivencia: el hazard ratio y su intervalo, también cuando el artículo solo da la p del log-rank, las medianas o los eventos.", campos: [] },
+    metaanalisis: { nom: "Metaanálisis", titulo: "Metaanálisis y diagrama de bosque", que: "Revisiones sistemáticas: combina los estudios (efectos fijos y aleatorios), mide la heterogeneidad (I²) y busca sesgo de publicación (embudo y Egger).", campos: [] },
+    umbrales: { nom: "Umbrales", titulo: "Umbrales de decisión: ¿hacer la prueba, tratar o nada?", que: "Con los riesgos y beneficios del tratamiento y de la prueba, la probabilidad por debajo de la cual no merece la pena la prueba y por encima de la cual se trata sin hacerla.", campos: [] },
+    kappa: { nom: "Kappa", titulo: "Concordancia entre observadores (kappa)", que: "¿Coinciden dos personas (o dos pruebas) más de lo esperable por azar? Índice kappa, simple y ponderado.", campos: [] },
     cei: { nom: "Coste-efectividad", titulo: "Razón de coste-efectividad incremental", que: "Evaluaciones económicas: cuánto cuesta cada unidad de efecto que se gana con la alternativa nueva.", campos: ["cn", "ch", "en", "eh", "unidad"] }
   };
   // Calculadora que corresponde a la «calc» de una pregunta de plantilla («fagan» usa la de diagnóstico; el metaanálisis es de la fase 2)
-  const CALC_DE_PREGUNTA = { tratamiento: "tratamiento", diagnostico: "diagnostico", fagan: "diagnostico", or: "or", cei: "cei" };
+  // Calculadora principal que corresponde a la «calc» de una pregunta de plantilla («fagan» usa la de diagnóstico) y las que se pueden añadir
+  const CALC_DE_PREGUNTA = { tratamiento: "tratamiento", diagnostico: "diagnostico", fagan: "diagnostico", or: "or", cei: "cei", metaanalisis: "metaanalisis" };
+  const CALCS_DE_PREGUNTA = { tratamiento: ["tratamiento", "supervivencia"], diagnostico: ["diagnostico", "niveles"], fagan: ["diagnostico"], or: ["or"], cei: ["cei"], metaanalisis: ["metaanalisis"] };
 
   function lleno(v) { return v != null && String(v).trim() !== ""; }
 
   const API = {
-    Z, num, prob, entero, fmt, pct, icTxt, redondearExcel, wilson, wald, icLog, incluye,
+    Z, num, prob, porc, entero, fmt, pct, icTxt, redondearExcel, wilson, wald, icLog, incluye,
     tratamiento, nntDe, nntTxt, nntIcTxt, sensibilidadPerdidas, SUPUESTOS, supuesto, nntPaciente, nntConF,
     oddsRatio, bayes, diagnostico, posterior, desdeSE, niveles, lrFuerza, LR_FUERZA_TXT,
     logit, P_TICKS, LR_TICKS, faganGeo, cei, CUADRANTES,
     textoTratamiento, textoDiagnostico, textoOR, textoCEI,
     trampasTratamiento, trampasDiagnostico, trampasOR, semaforoCalculo,
-    calcular, CALCS, CALC_DE_PREGUNTA
+    lnGamma, gammaQ, pNormal2, chi2Sup, normInv, betaInc, tSup2, tInv2,
+    MODOS_SUPERV, supervivencia, textoSupervivencia, MEDIDAS_META, METODOS_META, i2Intervalo, egger, metaanalisis, textoMeta, trampasMeta,
+    umbrales, DECISION_UMBRAL, kappa, kappaFuerza,
+    calcular, CALCS, CALC_DE_PREGUNTA, CALCS_DE_PREGUNTA
   };
   if (typeof module !== "undefined" && module.exports) module.exports = API;
   else raiz.Calculos = API;

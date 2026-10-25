@@ -70,14 +70,24 @@
   const nuevoConfusor = id => ({ id, texto: "", tenido: "" });
   const nuevaAccion = id => ({ id, que: "", quien: "", cuando: "" });
   // Una calculadora guardada con la lectura: solo lo escrito; los resultados se calculan siempre (calculos.js)
-  const CAMPOS_CALC = ["nc", "pc", "ec", "ne", "pe", "ee", "peer", "f", "a", "b", "c", "d", "pre", "umbral", "s", "e", "cn", "ch", "en", "eh", "unidad"];
+  const CAMPOS_CALC = ["nc", "pc", "ec", "ne", "pe", "ee", "peer", "f", "a", "b", "c", "d", "pre", "umbral", "s", "e", "cn", "ch", "en", "eh", "unidad",
+    // fase 2: supervivencia, metaanálisis y umbrales
+    "modo", "hr", "li", "ls", "oe", "v", "oe1", "ee1", "oc1", "ec1", "ev1", "ev2", "evt", "n1", "n2", "p", "sentido", "m1", "m2", "e1", "s1", "e2", "s2", "medida", "metodo", "dano", "rprueba", "beneficio"];
+  const CAMPOS_ESTUDIO = ["nombre", "ee", "ne", "ec", "nc", "hr", "li", "ls", "v", "n1", "m1", "d1", "n2", "m2", "d2"];
+  const nuevoEstudio = () => Object.fromEntries(CAMPOS_ESTUDIO.map(k => [k, ""]));
+  const matrizVacia = k => Array.from({ length: k }, () => Array.from({ length: k }, () => ""));
   const TIPOS_CALC = Object.keys(CA.CALCS);
   const nuevaEntrada = () => Object.fromEntries(CAMPOS_CALC.map(k => [k, ""]));
   const nuevoNivel = () => ({ nombre: "", a: "", b: "" });
-  const nuevoCalculo = (id, tipo) => ({ id, tipo, nombre: "", entrada: nuevaEntrada(), niveles: tipo === "niveles" ? [nuevoNivel(), nuevoNivel(), nuevoNivel()] : [], nota: "" });
-  const resultadoCalculo = c => CA.calcular(c.tipo, Object.assign({}, c.entrada, { niveles: c.niveles }));
+  function nuevoCalculo(id, tipo) {
+    const c = { id, tipo, nombre: "", entrada: nuevaEntrada(), niveles: tipo === "niveles" ? [nuevoNivel(), nuevoNivel(), nuevoNivel()] : [], estudios: tipo === "metaanalisis" ? [nuevoEstudio(), nuevoEstudio(), nuevoEstudio()] : [], matriz: tipo === "kappa" ? matrizVacia(2) : [], nota: "" };
+    if (tipo === "supervivencia") c.entrada.modo = "ic";
+    if (tipo === "metaanalisis") Object.assign(c.entrada, { medida: "or", metodo: "mh" });
+    return c;
+  }
+  const resultadoCalculo = c => CA.calcular(c.tipo, Object.assign({}, c.entrada, { niveles: c.niveles, estudios: c.estudios || [], matriz: c.matriz || [] }));
   // Las calculadoras de la lectura que sirven a una pregunta (por su «calc»)
-  const calculosDe = (l, q) => { const t = q && CA.CALC_DE_PREGUNTA[q.calc]; return t ? l.calculos.filter(c => c.tipo === t) : []; };
+  const calculosDe = (l, q) => { const t = q && CA.CALCS_DE_PREGUNTA[q.calc]; return t ? l.calculos.filter(c => t.includes(c.tipo)) : []; };
   const nuevoVeredicto = () => ({ semaforo: { validez: "", resultados: "", aplicabilidad: "" }, motivoSemaforo: { validez: "", resultados: "", aplicabilidad: "" }, decision: "", motivo: "", acciones: [], mensaje: "" });
   function nuevaLectura(id, fecha) {
     return {
@@ -230,7 +240,17 @@
   function textoCalculo(c) {
     if (!c) return "";
     const r = resultadoCalculo(c);
-    return c.tipo === "tratamiento" ? CA.textoTratamiento(r, c.nombre) : c.tipo === "diagnostico" ? CA.textoDiagnostico(r) : c.tipo === "or" ? CA.textoOR(r) : c.tipo === "cei" ? CA.textoCEI(r, c.entrada.unidad) : "";
+    if (!r.ok) return "";
+    if (c.tipo === "tratamiento") return CA.textoTratamiento(r, c.nombre);
+    if (c.tipo === "diagnostico" || c.tipo === "bayes") return CA.textoDiagnostico(r);
+    if (c.tipo === "or") return CA.textoOR(r);
+    if (c.tipo === "cei") return CA.textoCEI(r, c.entrada.unidad);
+    if (c.tipo === "supervivencia") return (c.nombre ? c.nombre + ": " : "") + CA.textoSupervivencia(r);
+    if (c.tipo === "metaanalisis") return CA.textoMeta(r);
+    if (c.tipo === "niveles") return r.filas.map((x, i) => `${x.nombre || "Nivel " + (i + 1)}: LR ${CA.fmt(x.lr.v)} (IC 95 %: ${CA.icTxt(x.lr)})`).join("; ") + ".";
+    if (c.tipo === "kappa") return `Kappa ${CA.fmt(r.kappa.v)} (IC 95 %: ${CA.icTxt(r.kappa)}): concordancia ${CA.kappaFuerza(r.kappa.v)}${r.k > 2 ? `; ponderado ${CA.fmt(r.kappaW)}` : ""}.`;
+    if (c.tipo === "umbrales") return `Umbral diagnóstico ${CA.pct(r.dx)} y terapéutico ${CA.pct(r.tx)}.${r.decision ? " " + CA.DECISION_UMBRAL[r.decision] : ""}`;
+    return "";
   }
 
   // ---------- Avisos didácticos por paso ----------
@@ -336,6 +356,9 @@
       if (c.tipo === "diagnostico" || c.tipo === "bayes") return { desenlace: c.nombre, medida: "LR+", valor: r.lrp.v, icInf: r.lrp.inf != null ? r.lrp.inf : null, icSup: r.lrp.sup != null ? r.lrp.sup : null, texto: `LR+ ${CA.fmt(r.lrp.v)}; LR− ${CA.fmt(r.lrn.v)}` };
       if (c.tipo === "or") return { desenlace: c.nombre, medida: "OR", valor: r.or.v, icInf: r.or.inf, icSup: r.or.sup, texto: `OR ${CA.fmt(r.or.v)} (IC 95 %: ${CA.icTxt(r.or)})` };
       if (c.tipo === "cei" && isFinite(r.rcei)) return { desenlace: c.entrada.unidad, medida: "RCEI", valor: r.rcei, icInf: null, icSup: null, texto: CA.textoCEI(r, c.entrada.unidad) };
+      if (c.tipo === "supervivencia") return { desenlace: c.nombre, medida: "HR", valor: r.hr.v, icInf: r.hr.inf, icSup: r.hr.sup, texto: `HR ${CA.fmt(r.hr.v)} (IC 95 %: ${CA.icTxt(r.hr)})` };
+      if (c.tipo === "metaanalisis") { const A = r.aleatorio, f = x => CA.fmt(x, r.log ? 2 : 2); return { desenlace: c.nombre, medida: { or: "OR", rr: "RR", dr: "DR", hr: "HR", dm: "DM", hedges: "g", cohen: "d", glass: "Δ" }[r.medida], valor: A.v, icInf: A.inf, icSup: A.sup, texto: `${CA.MEDIDAS_META[r.medida].nom} combinada ${f(A.v)} (IC 95 %: ${f(A.inf)} a ${f(A.sup)}); I² ${CA.pct(r.i2, 0)}` }; }
+      if (c.tipo === "kappa") return { desenlace: "", medida: "kappa", valor: r.kappa.v, icInf: r.kappa.inf, icSup: r.kappa.sup, texto: `Kappa ${CA.fmt(r.kappa.v)} (IC 95 %: ${CA.icTxt(r.kappa)})` };
       if (c.tipo === "niveles") return { desenlace: "", medida: "LR", valor: r.filas[0].lr.v, icInf: r.filas[0].lr.inf, icSup: r.filas[0].lr.sup, texto: r.filas.map((x, i) => `${x.nombre || "Nivel " + (i + 1)}: LR ${CA.fmt(x.lr.v)}`).join("; ") };
     }
     const q = preguntasDe(plantilla(l.plantilla), "resultados").find(x => lleno(resp(l, x.id).nota));
@@ -473,7 +496,7 @@
     const h2 = cabecera("Respuestas", ["Lectura", "Tipo", "Nº", "Bloque", "Pregunta", "Eliminación", "Respuesta", "Nota o resultado"]);
     L_.forEach(l => { const pl = plantilla(l.plantilla); preguntasDe(pl).forEach(q => { const r = resp(l, q.id); h2.push([T(nombreLectura(l), "negrita"), T(pl.corto), T(numeroDe(pl, q.id), "centro"), T(PL.BLOQUES[q.bloque].titulo), T(q.texto), T(q.elim ? "Sí" : "", "centro"), T(q.resp === "abierta" ? "" : (RESPUESTAS[r.valor] || ""), ESTILO_DE[r.valor] || "centro"), T(r.nota)]); }); });
     const h3 = cabecera("Cálculos", ["Lectura", "Calculadora", "Desenlace", "Datos", "Resultado"]);
-    L_.forEach(l => l.calculos.forEach(c => { const e = Object.entries(c.entrada).filter(([, v]) => lleno(v)).map(([k, v]) => `${k} = ${v}`).concat(c.niveles.filter(n => lleno(n.a) || lleno(n.b)).map((n, i) => `${n.nombre || "nivel " + (i + 1)}: ${n.a} / ${n.b}`)).join("; "); h3.push([T(nombreLectura(l), "negrita"), T(CA.CALCS[c.tipo].titulo), T(c.nombre), T(e), T(textoCalculo(c))]); }));
+    L_.forEach(l => l.calculos.forEach(c => { const e = Object.entries(c.entrada).filter(([, v]) => lleno(v)).map(([k, v]) => `${k} = ${v}`).concat(c.niveles.filter(n => lleno(n.a) || lleno(n.b)).map((n, i) => `${n.nombre || "nivel " + (i + 1)}: ${n.a} / ${n.b}`)).concat((c.estudios || []).filter(x => CAMPOS_ESTUDIO.slice(1).some(k => lleno(x[k]))).map((x, i) => `${x.nombre || "estudio " + (i + 1)}: ${CAMPOS_ESTUDIO.slice(1).filter(k => lleno(x[k])).map(k => `${k} ${x[k]}`).join(", ")}`)).concat((c.matriz || []).length ? ["tabla: " + c.matriz.map(f => f.join(" ")).join(" / ")] : []).join("; "); h3.push([T(nombreLectura(l), "negrita"), T(CA.CALCS[c.tipo].titulo), T(c.nombre), T(e), T(textoCalculo(c))]); }));
     const h4 = cabecera("Desenlaces y acciones", ["Lectura", "Qué", "Detalle", "Quién / importancia", "Cuándo / tipo"]);
     L_.forEach(l => { l.desenlaces.filter(x => lleno(x.nombre)).forEach(x => h4.push([T(nombreLectura(l), "negrita"), T("Desenlace"), T(x.nombre), T(x.importancia ? `${x.importancia} · ${IMPORTANCIA(Number(x.importancia))}` : "", "centro"), T(x.sentido === "dano" ? "Daño" : "Beneficio")])); l.veredicto.acciones.filter(a => lleno(a.que)).forEach(a => h4.push([T(nombreLectura(l), "negrita"), T("Acción"), T(a.que), T(a.quien), T(a.cuando)])); });
     const hojas = [
@@ -511,7 +534,8 @@
     asistente: { id: "id", nombre: [120] },
     club: { asistentes: { de: "asistente", max: 40 } },
     sesion: { id: "id", titulo: [400], pregunta: [1200], unidad: [200], fecha: [20], lecturas: { lista: "ref", max: 50 }, conclusion: [4000], decision: { en: ["", "aplicar", "esperar", "descartar"] }, creado: [40], modificado: [40] },
-    calculo: { id: "id", tipo: { en: TIPOS_CALC }, nombre: [300], entrada: { obj: "entradaCalc" }, niveles: { de: "nivel", max: 5 }, nota: [1500] },
+    estudio: Object.fromEntries(CAMPOS_ESTUDIO.map(k => [k, [k === "nombre" ? 120 : 20]])),
+    calculo: { id: "id", tipo: { en: TIPOS_CALC }, nombre: [300], entrada: { obj: "entradaCalc" }, niveles: { de: "nivel", max: 5 }, estudios: { de: "estudio", max: 30 }, matriz: { matriz: 6 }, nota: [1500] },
     semaforos: { validez: COLOR_EN, resultados: COLOR_EN, aplicabilidad: COLOR_EN },
     motivos: { validez: [600], resultados: [600], aplicabilidad: [600] },
     veredicto: { semaforo: { obj: "semaforos" }, motivoSemaforo: { obj: "motivos" }, decision: { en: ["", "aplicar", "esperar", "descartar"] }, motivo: [2000], acciones: { de: "accion", max: 20 }, mensaje: [800] },
@@ -523,7 +547,7 @@
   };
   const FABRICA = {
     referencia: () => nuevaLectura("x").referencia, pico: () => nuevaLectura("x").pico, filtro: () => nuevaLectura("x").filtro,
-    entradaCalc: nuevaEntrada, nivel: nuevoNivel, asistente: id => nuevoAsistente(id), club: () => ({ asistentes: [], votos: {} }), sesion: id => nuevaSesion(id, ""), calculo: id => nuevoCalculo(id, "tratamiento"),
+    entradaCalc: nuevaEntrada, nivel: nuevoNivel, estudio: nuevoEstudio, asistente: id => nuevoAsistente(id), club: () => ({ asistentes: [], votos: {} }), sesion: id => nuevaSesion(id, ""), calculo: id => nuevoCalculo(id, "tratamiento"),
     respuesta: nuevaRespuesta, desenlace: nuevoDesenlace, confusor: nuevoConfusor, accion: nuevaAccion,
     semaforos: () => nuevoVeredicto().semaforo, motivos: () => nuevoVeredicto().motivoSemaforo, veredicto: nuevoVeredicto,
     lectura: id => nuevaLectura(id, "")
@@ -540,6 +564,8 @@
       else if (regla.lista) r[k] = Array.isArray(v) ? [...new Set(v.slice(0, regla.max * 2).map(x => regla.lista === "ref" ? (idValido(x) ? x : "") : txt(x, regla.lista)).filter(Boolean))].slice(0, regla.max) : [];
       else if (regla.de) r[k] = Array.isArray(v) ? v.slice(0, regla.max).map(x => sanear(regla.de, x, genId)).filter(Boolean) : [];
       else if (regla.obj) r[k] = sanear(regla.obj, v, genId) || r[k];
+      // Tabla cuadrada de textos (kappa): hasta 6 × 6
+      else if (regla.matriz) { const n = Array.isArray(v) ? Math.min(regla.matriz, v.length) : 0; r[k] = n >= 2 && v.slice(0, n).every(f => Array.isArray(f)) ? v.slice(0, n).map(f => Array.from({ length: n }, (_, j) => txt(f[j], 12))) : r[k]; }
       else if (regla.mapa) {
         r[k] = {};
         if (v && typeof v === "object" && !Array.isArray(v)) Object.keys(v).filter(idPregunta).slice(0, regla.max).forEach(q => {
@@ -590,7 +616,7 @@
     lleno, sinTildes, corto, plural, fmtFecha,
     PASOS, PASO_BLOQUE, BLOQUE_PASO, RESPUESTAS, DECISIONES, COLORES, IMPORTANCIA, CLAVE_APLICA,
     plantilla, preguntasDe, numeroDe, PREFIJOS,
-    CAMPOS_CALC, TIPOS_CALC, nuevoCalculo, nuevoNivel, resultadoCalculo, calculosDe, textoCalculo,
+    CAMPOS_CALC, CAMPOS_ESTUDIO, TIPOS_CALC, nuevoCalculo, nuevoEstudio, matrizVacia, nuevoNivel, resultadoCalculo, calculosDe, textoCalculo,
     nuevaLectura, nuevaRespuesta, nuevoDesenlace, nuevoConfusor, nuevaAccion, nuevoVeredicto,
     resp, valor, contestada, ponerRespuesta, cambiarPlantilla,
     eliminacion, paradas, cerradaPronto, semaforoPropuesto, semaforo, decisionPropuesta,

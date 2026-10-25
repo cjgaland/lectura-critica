@@ -14,8 +14,15 @@
   // ---------- Versión y novedades ----------
   // Al publicar cambios: añadir una entrada AL PRINCIPIO de NOVEDADES, poner su versión en los ?v= de index.html, en
   // APP_VERSION y subir CACHE_NAME en sw.js. Formato de versión: AAAA.NN.
-  const APP_VERSION = "2026.03";
+  const APP_VERSION = "2026.04";
   const NOVEDADES = [
+    { version: "2026.04", fecha: "Octubre 2026", titulo: "Metaanálisis, supervivencia, umbrales y concordancia", cambios: [
+      "Metaanálisis con diagrama de bosque: odds ratio, riesgo relativo, diferencia de riesgos, hazard ratio y diferencias de medias (también estandarizadas), con efectos fijos (Mantel-Haenszel, Peto o inverso de la varianza) y aleatorios (DerSimonian-Laird), heterogeneidad (Q, I² con su intervalo y τ²), gráfico en embudo y prueba de Egger.",
+      "Supervivencia: el hazard ratio de un estudio, también cuando el artículo solo da la p del log-rank, los eventos observados y esperados o las medianas (métodos de Parmar).",
+      "Umbrales de decisión: ¿hacer la prueba, tratar sin ella o ninguna de las dos?",
+      "Concordancia entre observadores: índice kappa, simple y ponderado.",
+      "La revisión sistemática ya tiene su calculadora, y el ejemplo de Urgencias, su diagrama de bosque.",
+      "Arreglado: en las calculadoras sueltas, escribir en una casilla podía dar un error; y «1» en una casilla «en %» se leía como 100 %."] },
     { version: "2026.03", fecha: "Octubre 2026", titulo: "Fichas, sesiones, club de lectura y Aprende", cambios: [
       "Ficha de la lectura en Word y PDF: la pregunta, cada respuesta, los resultados con su dibujo o su nomograma, el semáforo y la decisión. Y un Excel con todas tus lecturas.",
       "Plantillas en blanco para imprimir y contestar a lápiz en el club de lectura.",
@@ -409,7 +416,128 @@
   const cIn = (bind, f, v, o = {}) => `<input class="txt-in calc-in" ${bind} data-f="${f}" value="${esc(v)}" inputmode="${o.modo || "numeric"}" placeholder="${esc(o.ph || "")}" aria-label="${esc(o.aria || f)}" autocomplete="off" />`;
   const resBox = (et, val, ic, o = {}) => `<div class="res${o.main ? " res--main" : ""}"><span class="res-et">${et}</span><b class="res-v">${val}</b>${ic ? `<span class="res-ic">IC 95 %: ${ic}</span>` : ""}${o.sub ? `<span class="res-sub">${o.sub}</span>` : ""}</div>`;
   const avisosCalc = l => l.map(avisoHtml).join("");
-  function calcForm(tipo, e, niveles, bind) {
+  // ---------- Fase 2: formularios, resultados y gráficos ----------
+  const selCalc = (bind, f, v, opciones, aria) => `<select class="txt-in calc-sel" ${bind} data-f="${f}" aria-label="${esc(aria)}">${opciones.map(([k, t]) => `<option value="${k}"${k === v ? " selected" : ""}>${esc(t)}</option>`).join("")}</select>`;
+  const CAMPOS_MODO = {
+    ic: [["hr", "Hazard ratio"], ["li", "Límite inferior del IC 95 %"], ["ls", "Límite superior del IC 95 %"]],
+    oev: [["oe", "O − E (observados menos esperados) del grupo intervención"], ["v", "Varianza del log-rank"]],
+    obsesp: [["oe1", "Eventos observados · intervención"], ["ee1", "Eventos esperados · intervención"], ["oc1", "Eventos observados · control"], ["ec1", "Eventos esperados · control"]],
+    logrank: [["p", "p del log-rank"], ["ev1", "Eventos · intervención"], ["ev2", "Eventos · control"], ["evt", "O bien: total de eventos"], ["n1", "Pacientes · intervención (si no es 1:1)"], ["n2", "Pacientes · control (si no es 1:1)"]],
+    medianas: [["m1", "Mediana de supervivencia · intervención"], ["m2", "Mediana de supervivencia · control"], ["ev1", "Eventos · intervención"], ["ev2", "Eventos · control"]],
+    riesgo: [["e1", "Con el evento · intervención"], ["s1", "Sin el evento · intervención"], ["e2", "Con el evento · control"], ["s2", "Sin el evento · control"]]
+  };
+  function formFase2(tipo, e, x, bind) {
+    if (tipo === "supervivencia") {
+      const modo = CAMPOS_MODO[e.modo] ? e.modo : "ic";
+      return `<div class="tabla-calc tabla-calc--2"><span>¿Qué da el artículo?</span>${selCalc(bind, "modo", modo, Object.entries(CA.MODOS_SUPERV), "Qué da el artículo")}
+        ${CAMPOS_MODO[modo].map(([k, t]) => `<span>${esc(t)}</span>${cIn(bind, k, e[k], { modo: "decimal", aria: t })}`).join("")}
+        ${modo === "logrank" ? `<span>¿A favor de quién?</span>${selCalc(bind, "sentido", e.sentido || "favor", [["favor", "Menos eventos con la intervención"], ["contra", "Más eventos con la intervención"]], "Sentido")}` : ""}</div>
+        <p class="calc-ayuda">${modo === "logrank" ? "Si solo da la p del log-rank, se estima el HR con los eventos (Parmar, 1998). Con los eventos de cada grupo se supone reparto 1:1." : modo === "medianas" ? "Con las medianas se supone que el riesgo es constante en el tiempo (exponencial): es una aproximación." : modo === "riesgo" ? "Los datos de un momento concreto, leídos de la curva o de la tabla de «número en riesgo»." : "Métodos de Parmar (1998) para sacar el hazard ratio de lo que publica el artículo."}</p>`;
+    }
+    if (tipo === "metaanalisis") {
+      const med = CA.MEDIDAS_META[e.medida] ? e.medida : "or", d = CA.MEDIDAS_META[med].datos, E = x.estudios || [];
+      const cols = d === "dic" ? [["ee", "Eventos (int.)"], ["ne", "Total (int.)"], ["ec", "Eventos (ctrl.)"], ["nc", "Total (ctrl.)"]] : d === "hr" ? [["hr", "HR"], ["li", "IC inf"], ["ls", "IC sup"]] : [["n1", "n (int.)"], ["m1", "Media (int.)"], ["d1", "DE (int.)"], ["n2", "n (ctrl.)"], ["m2", "Media (ctrl.)"], ["d2", "DE (ctrl.)"]];
+      return `<div class="tabla-calc tabla-calc--2"><span>Medida</span>${selCalc(bind, "medida", med, Object.entries(CA.MEDIDAS_META).map(([k, m]) => [k, m.nom]), "Medida")}
+        ${d === "dic" ? `<span>Método de efectos fijos</span>${selCalc(bind, "metodo", e.metodo || "mh", Object.entries(CA.METODOS_META).filter(([k]) => k !== "peto" || med === "or"), "Método")}` : ""}</div>
+        <div class="tabla-scroll"><table class="tabla-est"><thead><tr><th>Estudio</th>${cols.map(([, t]) => `<th>${t}</th>`).join("")}<th></th></tr></thead><tbody>
+          ${E.map((s, i) => `<tr><td><input class="txt-in calc-in calc-in--txt" ${bind} data-est="${i}" data-f="nombre" value="${esc(s.nombre)}" placeholder="Estudio ${i + 1}" aria-label="Nombre del estudio ${i + 1}" autocomplete="off" /></td>${cols.map(([k, t]) => `<td><input class="txt-in calc-in" ${bind} data-est="${i}" data-f="${k}" value="${esc(s[k])}" inputmode="decimal" aria-label="${esc(t)}, estudio ${i + 1}" autocomplete="off" /></td>`).join("")}<td><button type="button" class="icon-btn icon-btn--mini" data-act="est-del" ${bind} data-i="${i}" aria-label="Quitar el estudio"${E.length <= 2 ? " disabled" : ""}>✕</button></td></tr>`).join("")}
+        </tbody></table></div>
+        ${E.length < 30 ? `<button type="button" class="btn btn--ghost" data-act="est-nuevo" ${bind}>+ Añadir estudio</button>` : ""}
+        <p class="calc-ayuda">${d === "dic" ? "Int. = grupo intervención (o expuestos); ctrl. = control." : d === "hr" ? "El hazard ratio de cada estudio con su intervalo de confianza del 95 %." : "Medias y desviaciones estándar (DE) de cada grupo."}</p>`;
+    }
+    if (tipo === "umbrales") return `<div class="tabla-calc tabla-calc--2">
+        <span>Sensibilidad de la prueba, en %</span>${cIn(bind, "s", e.s, { modo: "decimal", ph: "p. ej. 90", aria: "Sensibilidad" })}
+        <span>Especificidad de la prueba, en %</span>${cIn(bind, "e", e.e, { modo: "decimal", ph: "p. ej. 80", aria: "Especificidad" })}
+        <span>Daño de tratar a quien no tiene la enfermedad, en %</span>${cIn(bind, "dano", e.dano, { modo: "decimal", ph: "p. ej. 10", aria: "Daño del tratamiento innecesario" })}
+        <span>Beneficio de tratar a quien sí la tiene, en %</span>${cIn(bind, "beneficio", e.beneficio, { modo: "decimal", ph: "p. ej. 30", aria: "Beneficio del tratamiento" })}
+        <span>Riesgo de la propia prueba, en %</span>${cIn(bind, "rprueba", e.rprueba, { modo: "decimal", ph: "p. ej. 1", aria: "Riesgo de la prueba" })}
+        <span>Probabilidad de tu paciente antes de la prueba, en % <small>(opcional)</small></span>${cIn(bind, "pre", e.pre, { modo: "decimal", ph: "p. ej. 30", aria: "Probabilidad antes de la prueba" })}</div>
+      <p class="calc-ayuda">Daño y beneficio en la misma escala: por ejemplo, el porcentaje de complicaciones graves que provoca el tratamiento y el porcentaje que evita.</p>`;
+    if (tipo === "kappa") {
+      const M = x.matriz && x.matriz.length ? x.matriz : L.matrizVacia(2), k = M.length;
+      return `<div class="tabla-calc tabla-calc--2"><span>Número de categorías</span>${selCalc(bind, "kk", String(k), [2, 3, 4, 5, 6].map(n => [String(n), n === 2 ? "2 (sí / no)" : String(n)]), "Número de categorías")}</div>
+        <div class="tabla-scroll"><table class="tabla-est"><thead><tr><th>Observador 1 ↓ · 2 →</th>${M.map((_, j) => `<th>${k === 2 ? (j ? "No" : "Sí") : j + 1}</th>`).join("")}</tr></thead><tbody>
+          ${M.map((f, i) => `<tr><th>${k === 2 ? (i ? "No" : "Sí") : i + 1}</th>${f.map((v, j) => `<td><input class="txt-in calc-in" ${bind} data-mx="${i}-${j}" value="${esc(v)}" inputmode="numeric" aria-label="Fila ${i + 1}, columna ${j + 1}" autocomplete="off" /></td>`).join("")}</tr>`).join("")}
+        </tbody></table></div><p class="calc-ayuda">En la diagonal, las veces que los dos coinciden. ${k > 2 ? "Con categorías ordenadas, el kappa ponderado cuenta los desacuerdos cercanos como medio acuerdo." : ""}</p>`;
+    }
+    return "";
+  }
+  function resFase2(tipo, e, r, nombre) {
+    const F = CA.fmt, P = CA.pct, IC = CA.icTxt;
+    if (tipo === "supervivencia") return `<div class="res-grid">${resBox("Hazard ratio (HR)", F(r.hr.v), IC(r.hr), { main: true })}${resBox("p", r.p < 0.001 ? "< 0,001" : F(r.p, 3), "")}${resBox("ln HR y su varianza", `${F(r.lnhr, 3)} · ${F(r.var, 4)}`, "", { sub: "para un metaanálisis" })}</div>
+      <p class="llano">${esc((nombre ? nombre + ": " : "") + CA.textoSupervivencia(r))}</p>${CA.incluye(r.hr, 1) ? `<div class="warn">⚠ El intervalo incluye el 1: el resultado es compatible con que no haya diferencia.</div>` : ""}`;
+    if (tipo === "metaanalisis") {
+      const M = CA.MEDIDAS_META[r.medida], A = r.aleatorio, Fi = r.fijo, f = x => F(x, M.log || r.medida === "dr" ? 2 : 2);
+      return `<div class="res-grid">
+          ${resBox("Efectos aleatorios (DerSimonian-Laird)", f(A.v), `${f(A.inf)} a ${f(A.sup)}`, { main: true, sub: `p ${A.p < 0.001 ? "< 0,001" : "= " + F(A.p, 3)}` })}
+          ${resBox(`Efectos fijos (${CA.METODOS_META[r.metodo]})`, f(Fi.v), `${f(Fi.inf)} a ${f(Fi.sup)}`, { sub: `p ${Fi.p < 0.001 ? "< 0,001" : "= " + F(Fi.p, 3)}` })}
+          ${resBox("Heterogeneidad (I²)", P(r.i2, 0), CA.incluye({ inf: 0, sup: 1 }, r.i2Inf) ? `${P(r.i2Inf, 0)} a ${P(r.i2Sup, 0)}` : "", { sub: `Q ${F(r.q, 1)}, ${r.gl} gl, p ${r.pQ < 0.001 ? "< 0,001" : "= " + F(r.pQ, 3)} · τ² ${F(r.tau2, 3)}` })}
+        </div>
+        <p class="llano">${esc(CA.textoMeta(r))}</p>
+        ${forestSvg(r)}
+        ${avisosCalc(CA.trampasMeta(r))}
+        <details class="calc-mas"><summary>Sesgo de publicación: gráfico en embudo y prueba de Egger</summary>${funnelSvg(r)}
+          ${r.egger ? `<p class="calc-ayuda">Prueba de Egger: intercepto ${F(r.egger.b0, 2)} (IC 90 %: ${F(r.egger.inf90, 2)} a ${F(r.egger.sup90, 2)}), p = ${F(r.egger.p, 3)}. Un intercepto lejos de 0 (p &lt; 0,10) indica asimetría: pueden faltar estudios pequeños sin efecto. Con menos de 10 estudios, la prueba tiene poca potencia.</p>` : `<p class="calc-ayuda">La prueba de Egger necesita al menos 3 estudios.</p>`}</details>`;
+    }
+    if (tipo === "umbrales") return `<div class="res-grid res-grid--2">${resBox("Umbral diagnóstico", P(r.dx), "", { sub: "por debajo, ni prueba ni tratamiento" })}${resBox("Umbral terapéutico", P(r.tx), "", { sub: "por encima, tratar sin la prueba" })}</div>
+      ${umbralSvg(r)}${r.decision ? `<p class="llano"><b>Con tu paciente (${P(r.pre)}):</b> ${esc(CA.DECISION_UMBRAL[r.decision])}</p>` : ""}${!r.util ? `<div class="warn">⚠ El umbral diagnóstico supera al terapéutico: con estos riesgos y beneficios la prueba no aporta; la decisión depende solo de la probabilidad.</div>` : ""}`;
+    if (tipo === "kappa") return `<div class="res-grid">${resBox("Índice kappa", F(r.kappa.v), IC(r.kappa), { main: true, sub: `concordancia ${CA.kappaFuerza(r.kappa.v)}` })}${resBox("Concordancia observada", P(r.po), "", { sub: `esperada por azar: ${P(r.pe)}` })}${r.k > 2 ? resBox("Kappa ponderado (lineal)", F(r.kappaW), "", { sub: `concordancia ${CA.kappaFuerza(r.kappaW)}` }) : ""}</div>
+      <p class="calc-ayuda">Escala de Landis y Koch: hasta 0,20 insignificante; 0,21-0,40 débil; 0,41-0,60 moderada; 0,61-0,80 buena; más de 0,80 muy buena.</p>`;
+    return "";
+  }
+  // Diagrama de bosque: un cuadrado por estudio (tamaño = peso) con su intervalo, y los rombos del efecto combinado
+  // compacto: para pantallas estrechas (sin las columnas de cifras, que van en la tabla de debajo)
+  function forestSvg(r, compacto) {
+    if (compacto === undefined) return `<div class="forest-ancho">${forestSvg(r, false)}</div><div class="forest-estrecho">${forestSvg(r, true)}</div>
+      <details class="calc-mas"><summary>Las cifras de cada estudio</summary><div class="tabla-scroll"><table class="tabla-res"><thead><tr><th>Estudio</th><th>${esc(CA.MEDIDAS_META[r.medida].nom)} (IC 95 %)</th><th>Peso fijo</th><th>Peso aleatorio</th></tr></thead><tbody>${r.estudios.map(e => `<tr><td>${esc(e.nombre)}</td><td>${CA.fmt(e.v, 2)} (${CA.fmt(e.inf, 2)} a ${CA.fmt(e.sup, 2)})</td><td>${CA.fmt(e.peso * 100, 1)} %</td><td>${CA.fmt(e.pesoAl * 100, 1)} %</td></tr>`).join("")}</tbody></table></div></details>`;
+    const M = CA.MEDIDAS_META[r.medida], E = r.estudios, filas = E.length + 3, H = 28 * filas + 40, W = compacto ? 400 : 680, x0 = compacto ? 132 : 190, x1 = compacto ? 388 : 470;
+    const vals = E.flatMap(e => [e.inf, e.sup]).concat([r.aleatorio.inf, r.aleatorio.sup, r.fijo.inf, r.fijo.sup, r.nula]).filter(v => isFinite(v) && (!M.log || v > 0));
+    const T = M.log ? Math.log : (v => v), lo0 = T(Math.min(...vals)), hi0 = T(Math.max(...vals)), mg = (hi0 - lo0) * 0.06 || 0.1, lo = lo0 - mg, hi = hi0 + mg;
+    const X = v => x0 + (T(v) - lo) / (hi - lo) * (x1 - x0), clip = v => Math.max(x0, Math.min(x1, X(v)));
+    const ticks = M.log ? [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100].filter(v => T(v) >= lo && T(v) <= hi) : (() => { const paso = Math.pow(10, Math.floor(Math.log10((hi - lo) / 4))), p = [1, 2, 5].map(m => m * paso).find(m => (hi - lo) / m <= 6) || paso * 10, l = []; for (let v = Math.ceil(lo / p) * p; v <= hi; v += p) l.push(Number(v.toFixed(10))); return l; })();
+    const wmax = Math.max(...E.map(e => e.peso)), f = v => CA.fmt(v, 2), lmax = compacto ? 17 : 24, nom = s => esc(s.length > lmax ? s.slice(0, lmax - 1) + "…" : s);
+    const fila = (e, i) => { const y = 34 + i * 28, lado = 4 + 10 * Math.sqrt(e.peso / wmax); return `<text x="8" y="${y + 4}" class="fo-txt">${nom(e.nombre)}</text><line x1="${clip(e.inf)}" x2="${clip(e.sup)}" y1="${y}" y2="${y}" class="fo-ic"/><rect x="${X(e.v) - lado / 2}" y="${y - lado / 2}" width="${lado}" height="${lado}" class="fo-cuad"/>${compacto ? "" : `<text x="${x1 + 12}" y="${y + 4}" class="fo-num">${f(e.v)} [${f(e.inf)}; ${f(e.sup)}]</text><text x="${W - 8}" y="${y + 4}" text-anchor="end" class="fo-num">${CA.fmt(e.peso * 100, 1)} %</text>`}`; };
+    const rombo = (R, i, et, cl) => { const y = 34 + i * 28; return `<text x="8" y="${y + 4}" class="fo-txt fo-txt--b">${compacto ? et.replace("Efectos ", "") : et}${compacto ? ` ${f(R.v)}` : ""}</text><polygon points="${clip(R.inf)},${y} ${X(R.v)},${y - 7} ${clip(R.sup)},${y} ${X(R.v)},${y + 7}" class="fo-rombo fo-rombo--${cl}"/>${compacto ? "" : `<text x="${x1 + 12}" y="${y + 4}" class="fo-num fo-txt--b">${f(R.v)} [${f(R.inf)}; ${f(R.sup)}]</text>`}`; };
+    const yEje = 34 + (E.length + 2) * 28 - 6;
+    return `<figure class="forest${compacto ? " forest--c" : ""}"><div class="tabla-scroll"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Diagrama de bosque: ${E.length} estudios; efecto combinado ${f(r.aleatorio.v)} (${f(r.aleatorio.inf)} a ${f(r.aleatorio.sup)})">
+      <text x="8" y="14" class="fo-tit">Estudio</text><text x="${(x0 + x1) / 2}" y="14" text-anchor="middle" class="fo-tit">${esc(compacto ? M.nom.replace(/ \(.*\)$/, "") : M.nom + " (IC 95 %)")}</text>${compacto ? "" : `<text x="${W - 8}" y="14" text-anchor="end" class="fo-tit">Peso</text>`}
+      <line x1="${X(r.nula)}" x2="${X(r.nula)}" y1="22" y2="${yEje}" class="fo-nula"/>
+      ${E.map(fila).join("")}
+      ${rombo(r.fijo, E.length, "Efectos fijos", "fijo")}${rombo(r.aleatorio, E.length + 1, "Efectos aleatorios", "al")}
+      <line x1="${x0}" x2="${x1}" y1="${yEje}" y2="${yEje}" class="fo-eje"/>
+      ${ticks.map(v => `<line x1="${X(v)}" x2="${X(v)}" y1="${yEje}" y2="${yEje + 4}" class="fo-eje"/><text x="${X(v)}" y="${yEje + 15}" text-anchor="middle" class="fo-num">${CA.fmt(v, 2)}</text>`).join("")}
+      <text x="${X(r.nula) - 6}" y="${H - 4}" text-anchor="end" class="fo-lado">← a favor de la intervención</text><text x="${X(r.nula) + 6}" y="${H - 4}" class="fo-lado">a favor del control →</text>
+    </svg></div><figcaption>Diagrama de bosque. Cada cuadrado es un estudio (más grande cuanto más peso) y su raya, el intervalo; los rombos son el efecto combinado. La línea vertical es el «sin efecto».${["dm", "hedges", "cohen", "glass"].includes(r.medida) ? " Si un valor alto es mejor, los lados se invierten." : ""}</figcaption></figure>`;
+  }
+  // Gráfico en embudo: efecto (x) frente a error estándar (y, invertido), con los límites del 95 % alrededor del efecto fijo
+  function funnelSvg(r) {
+    const M = CA.MEDIDAS_META[r.medida], E = r.estudios, W = 420, H = 280, m = 36, T = M.log ? Math.log : (v => v);
+    const seMax = Math.max(...E.map(e => e.se)) * 1.1, c = r.fijo.th, xs = E.map(e => e.th).concat([c - 1.96 * seMax, c + 1.96 * seMax]), lo = Math.min(...xs), hi = Math.max(...xs);
+    const X = t => m + (t - lo) / (hi - lo) * (W - 2 * m), Y = s => 14 + s / seMax * (H - m - 14);
+    return `<figure class="funnel"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Gráfico en embudo de ${E.length} estudios">
+      <polygon points="${X(c)},${Y(0)} ${X(c - 1.96 * seMax)},${Y(seMax)} ${X(c + 1.96 * seMax)},${Y(seMax)}" class="fu-cono"/>
+      <line x1="${X(c)}" x2="${X(c)}" y1="${Y(0)}" y2="${Y(seMax)}" class="fo-nula"/>
+      ${E.map(e => `<circle cx="${X(e.th)}" cy="${Y(e.se)}" r="5" class="fu-pt"><title>${esc(e.nombre)}</title></circle>`).join("")}
+      <line x1="${m}" x2="${W - m}" y1="${Y(seMax)}" y2="${Y(seMax)}" class="fo-eje"/><line x1="${m}" x2="${m}" y1="${Y(0)}" y2="${Y(seMax)}" class="fo-eje"/>
+      <text x="${W / 2}" y="${H - 6}" text-anchor="middle" class="fo-num">${M.log ? "ln " : ""}${esc(M.nom.toLowerCase())}</text><text x="12" y="${H / 2}" transform="rotate(-90 12 ${H / 2})" text-anchor="middle" class="fo-num">error estándar</text>
+    </svg><figcaption>Sin sesgo de publicación, los estudios forman un embudo simétrico: los grandes (arriba) cerca del efecto y los pequeños (abajo) repartidos a los dos lados.</figcaption></figure>`;
+  }
+  // Barra de 0 a 100 % con los dos umbrales y tu paciente
+  function umbralSvg(r) {
+    const W = 600, X = p => 20 + Math.max(0, Math.min(1, p)) * (W - 40), dx = Math.max(0, Math.min(1, r.dx)), tx = Math.max(0, Math.min(1, r.tx));
+    return `<figure class="umbral-fig"><svg viewBox="0 0 ${W} 74" role="img" aria-label="Umbral diagnóstico ${CA.pct(r.dx)}, umbral terapéutico ${CA.pct(r.tx)}">
+      <rect x="${X(0)}" y="22" width="${X(Math.min(dx, tx)) - X(0)}" height="16" class="um-no"/>
+      ${dx < tx ? `<rect x="${X(dx)}" y="22" width="${X(tx) - X(dx)}" height="16" class="um-prueba"/>` : ""}
+      <rect x="${X(Math.max(dx, tx))}" y="22" width="${X(1) - X(Math.max(dx, tx))}" height="16" class="um-tratar"/>
+      <text x="${X(0)}" y="56" class="fo-num">0 %</text><text x="${X(1)}" y="56" text-anchor="end" class="fo-num">100 %</text>
+      <text x="${X(dx)}" y="16" text-anchor="middle" class="fo-num">${CA.pct(r.dx, 0)}</text><text x="${X(tx)}" y="16" text-anchor="middle" class="fo-num">${CA.pct(r.tx, 0)}</text>
+      ${r.pre >= 0 && r.pre <= 1 ? `<polygon points="${X(r.pre)},40 ${X(r.pre) - 6},50 ${X(r.pre) + 6},50" class="um-pac"/><text x="${X(r.pre)}" y="66" text-anchor="middle" class="fo-txt--b fo-num">tu paciente</text>` : ""}
+    </svg><figcaption><span class="um-ley um-no"></span>ni prueba ni tratamiento · <span class="um-ley um-prueba"></span>hacer la prueba · <span class="um-ley um-tratar"></span>tratar sin la prueba</figcaption></figure>`;
+  }
+  // x: la calculadora (o la suelta) con sus niveles, estudios y tabla
+  function calcForm(tipo, e, x, bind) {
+    const niveles = x.niveles || [];
+    if (["supervivencia", "metaanalisis", "umbrales", "kappa"].includes(tipo)) return formFase2(tipo, e, x, bind);
     if (tipo === "tratamiento") return `
       <div class="tabla-calc tabla-calc--3"><span></span><b>Grupo control<small>o no expuestos</small></b><b>Grupo intervención<small>o expuestos</small></b>
         <span>Incluidos</span>${cIn(bind, "nc", e.nc, { aria: "Incluidos en el grupo control" })}${cIn(bind, "ne", e.ne, { aria: "Incluidos en el grupo intervención" })}
@@ -449,12 +577,13 @@
       <div class="tabla-calc tabla-calc--2"><span>Unidad del efecto</span><input class="txt-in calc-in calc-in--txt" ${bind} data-f="unidad" value="${esc(e.unidad)}" placeholder="AVAC, año de vida, caso evitado…" aria-label="Unidad del efecto" autocomplete="off" /></div>`;
     return "";
   }
-  function calcRes(tipo, e, niveles, nombre) {
-    const r = CA.calcular(tipo, Object.assign({}, e, { niveles }));
+  function calcRes(tipo, e, x, nombre) {
+    const niveles = x.niveles || [], r = CA.calcular(tipo, Object.assign({}, e, { niveles, estudios: x.estudios || [], matriz: x.matriz || [] }));
     if (!r.ok) return r.errores.length && Object.values(e).some(lleno) ? `<div class="note">ℹ ${esc(r.errores[0])}</div>` : `<p class="calc-vacia">Escribe los datos y verás aquí los resultados.</p>`;
     const F = CA.fmt, P = CA.pct, IC = CA.icTxt;
+    if (["supervivencia", "metaanalisis", "umbrales", "kappa"].includes(tipo)) return resFase2(tipo, e, r, nombre);
     if (tipo === "tratamiento") {
-      const n = r.nnt, peer = CA.prob(e.peer), f = CA.num(e.f);
+      const n = r.nnt, peer = CA.porc(e.peer), f = CA.num(e.f);
       const ancho = CA.incluye(r.rr, 1) || r.rr.sup / r.rr.inf > 4;
       const tm = `${L.URL_TM}#/dos-proporciones?d=${encodeURIComponent(JSON.stringify({ p1: F(r.rc.v * 100, 1).replace(",", "."), efecto: "p2", p2: F(r.re.v * 100, 1).replace(",", ".") }))}`;
       const sens = (r.perdidas.c || r.perdidas.e) ? sensHtml(e, r) : "";
@@ -475,7 +604,7 @@
     if (tipo === "or") return `<div class="res-grid res-grid--2">${resBox("Odds ratio (OR)", F(r.or.v), IC(r.or), { main: true })}${resBox("Expuestos", `${P(r.expCasos, 0)} · ${P(r.expControles, 0)}`, "", { sub: "de los casos · de los controles" })}</div>
         <p class="llano">${esc(CA.textoOR(r))}</p>${avisosCalc(CA.trampasOR(r))}`;
     if (tipo === "diagnostico" || tipo === "bayes") {
-      const umbral = CA.prob(e.umbral), dx = tipo === "diagnostico";
+      const umbral = CA.porc(e.umbral), dx = tipo === "diagnostico";
       const lineas = [{ lr: r.lrp.v, et: "Positivo", c: "pos" }, { lr: r.lrn.v, et: "Negativo", c: "neg" }];
       return `<div class="res-grid">
           ${dx ? resBox("Sensibilidad", P(r.s.v), IC(r.s, P)) + resBox("Especificidad", P(r.e.v), IC(r.e, P)) : ""}
@@ -555,9 +684,9 @@
     const bind = `data-calc="${c.id}"`, info = CA.CALCS[c.tipo];
     return `<div class="calc-card" data-calcid="${c.id}">
       <div class="calc-cab"><span class="calc-tag">🧮 ${esc(info.titulo)}</span><button type="button" class="icon-btn icon-btn--mini" data-act="calc-del" data-id="${c.id}" aria-label="Quitar esta calculadora">✕</button></div>
-      ${c.tipo === "tratamiento" ? `<input class="txt-in" ${bind} data-f="nombre" value="${esc(c.nombre)}" placeholder="Desenlace (por ejemplo, empeoramiento no detectado)" list="dl-des" aria-label="Desenlace" autocomplete="off" />` : ""}
-      ${calcForm(c.tipo, c.entrada, c.niveles, bind)}
-      <div data-zcalc="${c.id}">${calcRes(c.tipo, c.entrada, c.niveles, c.nombre)}</div>
+      ${["tratamiento", "supervivencia", "metaanalisis"].includes(c.tipo) ? `<input class="txt-in" ${bind} data-f="nombre" value="${esc(c.nombre)}" placeholder="Desenlace (por ejemplo, empeoramiento no detectado)" list="dl-des" aria-label="Desenlace" autocomplete="off" />` : ""}
+      ${calcForm(c.tipo, c.entrada, c, bind)}
+      <div data-zcalc="${c.id}">${calcRes(c.tipo, c.entrada, c, c.nombre)}</div>
       <div class="toolbar"><button type="button" class="btn" data-act="calc-usar" data-id="${c.id}" data-q="${q.id}">Usar en la respuesta</button></div>
     </div>`;
   }
@@ -571,13 +700,12 @@
   }
   // Lo que se pinta en una pregunta que usa una calculadora
   function calcEnPregunta(l, pl, q) {
-    const tipo = CA.CALC_DE_PREGUNTA[q.calc];
-    if (!tipo) return `<p class="calc-prox">🧮 La calculadora de metaanálisis llegará en una próxima versión. Mientras, escribe aquí lo que dice el artículo.</p>`;
-    const qs = L.preguntasDe(pl), primera = qs.find(x => CA.CALC_DE_PREGUNTA[x.calc] === tipo), cs = l.calculos.filter(c => c.tipo === tipo);
+    const tipo = CA.CALC_DE_PREGUNTA[q.calc]; if (!tipo) return "";
+    const tipos = CA.CALCS_DE_PREGUNTA[q.calc], qs = L.preguntasDe(pl), primera = qs.find(x => CA.CALC_DE_PREGUNTA[x.calc] === tipo), cs = l.calculos.filter(c => tipos.includes(c.tipo));
     if (q.calc === "fagan") {
       const c = cs.map(x => ({ x, r: L.resultadoCalculo(x) })).find(y => y.r.ok);
       if (!c) return `<p class="calc-prox">🧮 Calcula antes los cocientes de probabilidad en la pregunta ${L.numeroDe(pl, primera.id)}: aquí verás el nomograma de Fagan con tu umbral de acción.</p>`;
-      const u = CA.prob(c.x.entrada.umbral);
+      const u = CA.porc(c.x.entrada.umbral);
       return `<div class="calc-card"><span class="calc-tag">🧮 ¿Cambia lo que haces?</span>
         <p class="calc-ayuda">Probabilidad antes de la prueba: ${CA.pct(c.r.pre)}. Si da positivo, ${CA.pct(c.r.post.pos.v)}; si da negativo, ${CA.pct(c.r.post.neg.v)}. ${u > 0 && u < 1 ? esc(umbralTxt(c.r, u)) : `Escribe tu umbral de acción en la calculadora de la pregunta ${L.numeroDe(pl, primera.id)}.`}</p>
         ${faganSvg(c.r.pre, [{ lr: c.r.lrp.v, et: "Positivo", c: "pos" }, { lr: c.r.lrn.v, et: "Negativo", c: "neg" }], u)}</div>`;
@@ -586,28 +714,31 @@
       const res = cs.map(c => calcResumen(l, c)).join("");
       return res ? `<div class="calc-resumen"><span class="calc-tag">🧮 Lo que da la calculadora (pregunta ${L.numeroDe(pl, primera.id)})</span><ul>${res}</ul></div>` : `<p class="calc-prox">🧮 Usa la calculadora de la pregunta ${L.numeroDe(pl, primera.id)}: aquí verás sus intervalos de confianza.</p>`;
     }
+    const btn = (t, i) => `<button type="button" class="btn ${cs.length || i ? "btn--ghost" : "btn--primary"}" data-act="calc-nuevo" data-tipo="${t}">${t === "supervivencia" ? "⏱ Supervivencia (hazard ratio)" : t === "niveles" ? "+ Prueba con varios niveles" : cs.length ? (t === "tratamiento" ? "+ Calcular otro desenlace" : "+ Otra calculadora") : "🧮 Abrir la calculadora"}</button>`;
     return `${cs.map(c => calcCard(l, c, q)).join("")}
-      <button type="button" class="btn ${cs.length ? "btn--ghost" : "btn--primary"}" data-act="calc-nuevo" data-tipo="${tipo}">${cs.length ? (tipo === "tratamiento" ? "+ Calcular otro desenlace" : "+ Otra calculadora") : "🧮 Abrir la calculadora"}</button>
+      <div class="toolbar">${tipos.map(btn).join("")}</div>
       ${tipo === "tratamiento" && l.desenlaces.some(d => lleno(d.nombre)) ? `<datalist id="dl-des">${l.desenlaces.filter(d => lleno(d.nombre)).map(d => `<option value="${esc(d.nombre)}">`).join("")}</datalist>` : ""}`;
   }
 
   // ---------- Calculadoras sueltas ----------
   const sueltas = {};
   // Lo que viaja en el enlace: solo lo escrito
-  const estadoSuelta = s => { const d = {}; Object.keys(s.entrada).forEach(k => { if (lleno(s.entrada[k])) d[k] = s.entrada[k]; }); if (s.niveles.some(n => lleno(n.a) || lleno(n.b) || lleno(n.nombre))) d.niveles = s.niveles; if (lleno(s.nombre)) d.nombre = s.nombre; return d; };
-  const suelta = tipo => sueltas[tipo] || (sueltas[tipo] = { entrada: L.nuevoCalculo("x", tipo).entrada, niveles: L.nuevoCalculo("x", tipo).niveles, nombre: "" });
+  const estadoSuelta = s => { const d = {}; Object.keys(s.entrada).forEach(k => { if (lleno(s.entrada[k])) d[k] = s.entrada[k]; }); if (s.niveles.some(n => lleno(n.a) || lleno(n.b) || lleno(n.nombre))) d.niveles = s.niveles; if (s.estudios.some(x => Object.values(x).some(lleno))) d.estudios = s.estudios; if (s.matriz.some(f => f.some(lleno))) d.matriz = s.matriz; if (lleno(s.nombre)) d.nombre = s.nombre; return d; };
+  const suelta = tipo => sueltas[tipo] || (sueltas[tipo] = (({ entrada, niveles, estudios, matriz }) => ({ entrada, niveles, estudios, matriz, nombre: "" }))(L.nuevoCalculo("x", tipo)));
   function renderCalc(tipo, d) {
     if (!CA.CALCS[tipo]) {
       view.innerHTML = `
         <h1 class="page-title">Calcular</h1>
         <p class="page-lead">Las calculadoras de los resultados, sueltas. Dentro de una lectura aparecen en la pregunta donde se necesitan.</p>
         <div class="cuadro-lista cuadro-lista--2">${Object.entries(CA.CALCS).map(([k, c]) => `<a class="item-card item-main" href="#/calc/${k}"><b class="item-t">🧮 ${esc(c.titulo)}</b><span class="item-s">${esc(c.que)}</span></a>`).join("")}
-          <div class="item-card item-main item-card--prox"><b class="item-t">Metaanálisis y supervivencia</b><span class="item-s">Diagrama de bosque, heterogeneidad (I²) y hazard ratio. Próximamente.</span></div></div>
+</div>
         ${trampa("Una calculadora no arregla un mal estudio: primero, <b>¿es válido?</b> Los números de un estudio con sesgos son números sesgados.")}`;
       return;
     }
     const s = suelta(tipo);
-    if (d) { try { const o = JSON.parse(d); Object.keys(s.entrada).forEach(k => { if (typeof o[k] === "string" || typeof o[k] === "number") s.entrada[k] = String(o[k]).slice(0, 40); }); if (Array.isArray(o.niveles)) s.niveles = o.niveles.slice(0, 5).map(n => ({ nombre: String(n.nombre || "").slice(0, 100), a: String(n.a || "").slice(0, 12), b: String(n.b || "").slice(0, 12) })); if (typeof o.nombre === "string") s.nombre = o.nombre.slice(0, 300); } catch (e) { /* enlace dañado */ } }
+    if (d) { try { const o = JSON.parse(d); Object.keys(s.entrada).forEach(k => { if (typeof o[k] === "string" || typeof o[k] === "number") s.entrada[k] = String(o[k]).slice(0, 40); }); if (Array.isArray(o.niveles)) s.niveles = o.niveles.slice(0, 5).map(n => ({ nombre: String(n.nombre || "").slice(0, 100), a: String(n.a || "").slice(0, 12), b: String(n.b || "").slice(0, 12) })); if (typeof o.nombre === "string") s.nombre = o.nombre.slice(0, 300);
+      // Estudios y tabla del kappa: pasan por el mismo saneado que una calculadora guardada
+      if (Array.isArray(o.estudios) || Array.isArray(o.matriz)) { const c = L.sanearLectura({ id: "x", calculos: [{ id: "x", tipo, estudios: o.estudios, matriz: o.matriz }] }, genId, hoy()).calculos[0]; if (c.estudios.length) s.estudios = c.estudios; if (c.matriz.length) s.matriz = c.matriz; } } catch (e) { /* enlace dañado */ } }
     const info = CA.CALCS[tipo], bind = `data-cs="${tipo}"`;
     const lecturas = datos.lecturas.slice().sort((a, b) => String(b.modificado).localeCompare(String(a.modificado)));
     view.innerHTML = `
@@ -617,8 +748,8 @@
       ${facil(FACIL_CALC[tipo])}
       <div class="calc-card">
         ${tipo === "tratamiento" ? `<input class="txt-in" ${bind} data-f="nombre" value="${esc(s.nombre)}" placeholder="Desenlace (por ejemplo, ingreso en UCI)" aria-label="Desenlace" autocomplete="off" />` : ""}
-        ${calcForm(tipo, s.entrada, s.niveles, bind)}
-        <div data-zcalc="cs-${tipo}">${calcRes(tipo, s.entrada, s.niveles, s.nombre)}</div>
+        ${calcForm(tipo, s.entrada, s, bind)}
+        <div data-zcalc="cs-${tipo}">${calcRes(tipo, s.entrada, s, s.nombre)}</div>
       </div>
       <div class="card">
         <h2 class="sub-h">Guardar o compartir</h2>
@@ -632,6 +763,10 @@
     diagnostico: `<p>Una prueba no dice «sí» o «no»: <b>cambia la probabilidad</b> de que tu paciente tenga la enfermedad.</p><ul><li><b>Sensibilidad</b>: de los enfermos, cuántos dan positivo. <b>Especificidad</b>: de los sanos, cuántos dan negativo.</li><li>Los <b>cocientes de probabilidad (LR)</b> dicen cuánto mueve la probabilidad un resultado. LR+ mayor de 10 o LR− menor de 0,1: cambio grande.</li><li>Los <b>valores predictivos</b> dependen de la prevalencia: en tu medio pueden ser muy distintos a los del estudio.</li></ul><p>Con el <b>nomograma de Fagan</b> unes la probabilidad antes de la prueba con el LR y lees la de después.</p>`,
     niveles: `<p>Muchas pruebas no son solo positivas o negativas (una escala de 0 a 10, un valor de laboratorio por tramos). Partirlas en dos pierde información: es mejor un <b>cociente de probabilidad para cada nivel</b>.</p>`,
     bayes: `<p>Si el artículo solo da la sensibilidad y la especificidad, puedes calcular los cocientes de probabilidad (LR+ = S / (1 − E); LR− = (1 − S) / E) y, con la probabilidad que tiene tu paciente antes de la prueba, la de después.</p>`,
+    supervivencia: `<p>Cuando importa <b>cuándo</b> ocurre el evento (muerte, recaída), se comparan curvas de supervivencia. El <b>hazard ratio (HR)</b> compara el riesgo instantáneo de evento en los dos grupos a lo largo del seguimiento: HR 0,70 = en cada momento, un 30 % menos de riesgo.</p><p>Muchos artículos no dan el HR. Con los métodos de Parmar se puede estimar con la p del log-rank y los eventos, con los observados y esperados, o, de forma aproximada, con las medianas.</p>`,
+    metaanalisis: `<p>Un <b>metaanálisis</b> combina los resultados de varios estudios en una sola cifra, dando más peso a los más precisos.</p><ul><li><b>Efectos fijos</b>: supone que todos los estudios miden el mismo efecto.</li><li><b>Efectos aleatorios</b> (DerSimonian-Laird): admite que el efecto varíe de un estudio a otro; su intervalo es más ancho y más honesto si hay heterogeneidad.</li><li><b>I²</b>: cuánto discrepan los estudios más allá del azar. Más del 50 %, mucho.</li><li>El <b>embudo</b> y la prueba de <b>Egger</b> buscan sesgo de publicación.</li></ul>`,
+    umbrales: `<p>Una prueba solo merece la pena si su resultado puede cambiar lo que haces. Con los riesgos y beneficios del tratamiento y de la prueba salen dos umbrales (Pauker y Kassirer):</p><ul><li>Por debajo del <b>umbral diagnóstico</b>, la enfermedad es tan poco probable que ni se hace la prueba ni se trata.</li><li>Por encima del <b>umbral terapéutico</b>, es tan probable que se trata sin hacer la prueba.</li><li>Entre los dos, se hace la prueba y se decide según su resultado.</li></ul>`,
+    kappa: `<p>El <b>índice kappa</b> mide si dos observadores (o dos pruebas) coinciden más de lo que coincidirían por azar: 0 = como el azar, 1 = acuerdo perfecto.</p><p>Importa en las pruebas que dependen de quien las interpreta (una radiografía, una escala): si la concordancia es mala, en tu medio la prueba funcionará peor que en el estudio.</p>`,
     cei: `<p>La <b>razón de coste-efectividad incremental (RCEI)</b> es lo que cuesta de más cada unidad de efecto que se gana con la alternativa nueva: diferencia de costes ÷ diferencia de efectos.</p><p>Si la nueva cuesta menos y consigue más, <b>domina</b>: no hace falta calcular nada. Si cuesta más y consigue más, hay que decidir si la RCEI merece la pena (por ejemplo, frente a un umbral por AVAC).</p>`
   };
 
@@ -705,7 +840,7 @@
       const q = L.preguntasDe(L.plantilla(l.plantilla)).find(x => x.id === el.dataset.pq); if (!q || q.resp !== "abierta") return;
       el.classList.toggle("hecha", L.contestada(l, q));
     });
-    $$("[data-zcalc]").forEach(el => { const c = l.calculos.find(x => x.id === el.dataset.zcalc); if (c) el.innerHTML = calcRes(c.tipo, c.entrada, c.niveles, c.nombre); });
+    $$("[data-zcalc]").forEach(el => { const c = l.calculos.find(x => x.id === el.dataset.zcalc); if (c) el.innerHTML = calcRes(c.tipo, c.entrada, c, c.nombre); });
   }
   function repintar() { const y = window.scrollY; renderLectura(actual, pasoActual); window.scrollTo(0, y); }
 
@@ -804,7 +939,7 @@
       const l = buscaLectura(p[1]) || borradores.get(p[1]); if (!l) return null;
       const doc = L.documentoFicha(l, fecha);
       // Gráficos de las calculadoras (solo en la vista previa y el PDF), antes del veredicto
-      const graf = l.calculos.map(c => { const r = L.resultadoCalculo(c); if (!r.ok) return ""; if (c.tipo === "tratamiento") return `<h3 class="doc-h2">${esc(c.nombre ? "De cada 100 personas: " + c.nombre : "De cada 100 personas")}</h3>${pictograma(r)}`; if (c.tipo === "diagnostico" || c.tipo === "bayes") return `<h3 class="doc-h2">Nomograma de Fagan</h3>${faganSvg(r.pre, [{ lr: r.lrp.v, et: "Positivo", c: "pos" }, { lr: r.lrn.v, et: "Negativo", c: "neg" }], CA.prob(c.entrada.umbral))}`; return ""; }).join("");
+      const graf = l.calculos.map(c => { const r = L.resultadoCalculo(c); if (!r.ok) return ""; if (c.tipo === "tratamiento") return `<h3 class="doc-h2">${esc(c.nombre ? "De cada 100 personas: " + c.nombre : "De cada 100 personas")}</h3>${pictograma(r)}`; if (c.tipo === "metaanalisis") return `<h3 class="doc-h2">Diagrama de bosque</h3>${forestSvg(r)}`; if (c.tipo === "umbrales") return `<h3 class="doc-h2">Umbrales de decisión</h3>${umbralSvg(r)}`; if (c.tipo === "diagnostico" || c.tipo === "bayes") return `<h3 class="doc-h2">Nomograma de Fagan</h3>${faganSvg(r.pre, [{ lr: r.lrp.v, et: "Positivo", c: "pos" }, { lr: r.lrn.v, et: "Negativo", c: "neg" }], CA.porc(c.entrada.umbral))}`; return ""; }).join("");
       if (graf) { const i = doc.bloques.findIndex(b => b.t === "h1" && /Veredicto/.test(b.texto)); doc.bloques.splice(i < 0 ? doc.bloques.length : i, 0, { t: "html", html: `<div class="doc-graf">${graf}</div>` }); }
       return { doc, base: "Lectura crítica " + (nombreLectura(l) || "").slice(0, 60) };
     }
@@ -1306,6 +1441,17 @@
   new MutationObserver(() => $$("textarea.txt-in", view).forEach(el => { if (!el.closest("[hidden]") && el.offsetParent) autoAlto(el); })).observe(view, { childList: true, subtree: true });
   view.addEventListener("toggle", e => { if (e.target.matches("details")) $$("textarea.txt-in", e.target).forEach(autoAlto); }, true);
 
+  // Escribe un dato en una calculadora (guardada o suelta). Devuelve true si el formulario cambia de forma (hay que repintarlo)
+  function ponerEnCalc(c, t, f) {
+    if (t.dataset.nv) { c.niveles[Number(t.dataset.nv)][f] = t.value; return false; }
+    if (t.dataset.est) { c.estudios[Number(t.dataset.est)][f] = t.value; return false; }
+    if (t.dataset.mx) { const [i, j] = t.dataset.mx.split("-").map(Number); c.matriz[i][j] = t.value; return false; }
+    if (f === "kk") { const k = Number(t.value), M = L.matrizVacia(k); (c.matriz || []).forEach((fi, i) => fi.forEach((v, j) => { if (i < k && j < k) M[i][j] = v; })); c.matriz = M; return true; }
+    if (f === "nombre") { c.nombre = t.value; return false; }
+    c.entrada[f] = t.value;
+    if (f === "medida" && c.entrada.medida !== "or" && c.entrada.metodo === "peto") c.entrada.metodo = "mh";
+    return ["modo", "medida", "metodo"].includes(f);
+  }
   view.addEventListener("input", e => {
     const t = e.target, l = actual;
     if (t.matches("textarea.txt-in")) autoAlto(t);
@@ -1316,8 +1462,8 @@
     if (t.dataset.as && l) { const a = buscaEn(l.club.asistentes, t.dataset.as); if (a) { a.nombre = t.value; tocado(l); } return; }
     if (t.dataset.cs) {
       const tipo = t.dataset.cs, s = suelta(tipo);
-      if (t.dataset.nv) s.niveles[Number(t.dataset.nv)][f] = t.value; else if (f === "nombre") s.nombre = t.value; else s.entrada[f] = t.value;
-      const z = $(`[data-zcalc="cs-${tipo}"]`); if (z) z.innerHTML = calcRes(tipo, s.entrada, s.niveles, s.nombre);
+      if (ponerEnCalc(s, t, f)) { history.replaceState(null, "", `#/calc/${tipo}?d=${encodeURIComponent(JSON.stringify(estadoSuelta(s)))}`); const y = window.scrollY; renderCalc(tipo); window.scrollTo(0, y); return; }
+      const z = $(`[data-zcalc="cs-${tipo}"]`); if (z) z.innerHTML = calcRes(tipo, s.entrada, s, s.nombre);
       history.replaceState(null, "", `#/calc/${tipo}?d=${encodeURIComponent(JSON.stringify(estadoSuelta(s)))}`);
       return;
     }
@@ -1325,8 +1471,8 @@
     if (t.dataset.q) { L.ponerRespuesta(l, t.dataset.q, "nota", t.value); tocado(l); refrescar(); return; }
     if (t.dataset.calc) {
       const c = buscaEn(l.calculos, t.dataset.calc); if (!c) return;
-      if (t.dataset.nv) c.niveles[Number(t.dataset.nv)][f] = t.value; else if (f === "nombre") c.nombre = t.value; else c.entrada[f] = t.value;
-      tocado(l); refrescar(); return;
+      const rehacer = ponerEnCalc(c, t, f);
+      tocado(l); if (rehacer) repintar(); else refrescar(); return;
     }
     if (t.dataset.des) { const d = buscaEn(l.desenlaces, t.dataset.des); if (!d) return; d[f] = t.value; tocado(l); refrescar(); return; }
     if (t.dataset.con) { const c = buscaEn(l.confusores, t.dataset.con); if (!c) return; c[f] = t.value; tocado(l); refrescar(); return; }
@@ -1385,7 +1531,7 @@
       }
       case "cs-guardar": {
         const x = buscaLectura(($("#cs-lectura") || {}).value), s = suelta(b.dataset.tipo); if (!x) return;
-        const c = Object.assign(L.nuevoCalculo(genId(), b.dataset.tipo), clon({ entrada: s.entrada, niveles: s.niveles, nombre: s.nombre }));
+        const c = Object.assign(L.nuevoCalculo(genId(), b.dataset.tipo), clon({ entrada: s.entrada, niveles: s.niveles, estudios: s.estudios, matriz: s.matriz, nombre: s.nombre }));
         x.calculos.push(c); tocado(x);
         toast(`Guardado en «${L.corto(nombreLectura(x) || "tu lectura", 50)}».`, 3500); return;
       }
@@ -1395,6 +1541,13 @@
         return;
       }
       case "cs-limpiar": { delete sueltas[b.dataset.tipo]; history.replaceState(null, "", `#/calc/${b.dataset.tipo}`); renderCalc(b.dataset.tipo); return; }
+      case "est-nuevo": case "est-del": if (b.dataset.cs) {
+        const s = suelta(b.dataset.cs);
+        if (act === "est-nuevo" && s.estudios.length < 30) s.estudios.push(L.nuevoEstudio());
+        if (act === "est-del" && s.estudios.length > 2) s.estudios.splice(Number(b.dataset.i), 1);
+        history.replaceState(null, "", `#/calc/${b.dataset.cs}?d=${encodeURIComponent(JSON.stringify(estadoSuelta(s)))}`);
+        { const y = window.scrollY; renderCalc(b.dataset.cs); window.scrollTo(0, y); } return;
+      } break;
       case "nivel-nuevo": case "nivel-del": if (b.dataset.cs) {
         const s = suelta(b.dataset.cs);
         if (act === "nivel-nuevo" && s.niveles.length < 5) s.niveles.push(L.nuevoNivel());
@@ -1444,7 +1597,7 @@
       case "calc-del": {
         const c = buscaEn(l.calculos, b.dataset.id); if (!c) return;
         const quitar = () => { l.calculos = l.calculos.filter(x => x.id !== c.id); tocado(l); repintar(); };
-        if (Object.values(c.entrada).some(lleno) || c.niveles.some(n => lleno(n.a) || lleno(n.b))) confirmar("<p>Se quitará esta calculadora con sus datos.</p>", "Quitar", quitar); else quitar();
+        if (Object.entries(c.entrada).some(([k, v]) => !["modo", "medida", "metodo"].includes(k) && lleno(v)) || c.niveles.some(n => lleno(n.a) || lleno(n.b)) || c.estudios.some(x => Object.values(x).some(lleno)) || c.matriz.some(f => f.some(lleno))) confirmar("<p>Se quitará esta calculadora con sus datos.</p>", "Quitar", quitar); else quitar();
         return;
       }
       case "calc-usar": {
@@ -1452,6 +1605,12 @@
         const txt = L.textoCalculo(c); if (!txt) { toast("Completa antes los datos de la calculadora.", 3000); return; }
         const prev = L.resp(l, b.dataset.q).nota;
         L.ponerRespuesta(l, b.dataset.q, "nota", lleno(prev) ? prev.trim() + "\n" + txt : txt); tocado(l); repintar(); toast("Resultado copiado en la respuesta.", 2500); return;
+      }
+      case "est-nuevo": case "est-del": {
+        const c = buscaEn(l.calculos, b.dataset.calc); if (!c) return;
+        if (act === "est-nuevo" && c.estudios.length < 30) c.estudios.push(L.nuevoEstudio());
+        if (act === "est-del" && c.estudios.length > 2) c.estudios.splice(Number(b.dataset.i), 1);
+        tocado(l); repintar(); return;
       }
       case "nivel-nuevo": case "nivel-del": {
         const c = buscaEn(l.calculos, b.dataset.calc); if (!c) return;

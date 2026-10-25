@@ -1387,3 +1387,38 @@ body.modo-proyector .club-asist, body.modo-proyector .page-lead { display: none;
 .ej-calc input { flex: 1; }
 .preguntas > *, .calc-card > *, .semaforos > * { min-width: 0; }
 .table-wrap { overflow-x: auto; max-width: 100%; }
+
+/* ---------- Fase 2: supervivencia, metaanálisis, umbrales y kappa ---------- */
+select.calc-sel { font-weight: 600; }
+.tabla-est { border-collapse: collapse; margin: 8px 0; min-width: 100%; }
+.tabla-est th { font-size: 11.5px; font-weight: 700; color: var(--text-2); padding: 3px 4px; text-align: center; white-space: nowrap; }
+.tabla-est td { padding: 2px 3px; }
+.tabla-est input.calc-in { min-width: 62px; font-size: 15px; padding: 7px 4px; }
+.tabla-est input.calc-in--txt { min-width: 110px; }
+.forest { margin: 12px 0 0; }
+.forest svg { width: 100%; min-width: 560px; height: auto; display: block; }
+.forest figcaption, .funnel figcaption, .umbral-fig figcaption { font-size: 12.5px; color: var(--text-3); margin-top: 4px; }
+.fo-txt { fill: var(--text-1); font: 500 11.5px var(--font); }
+.fo-txt--b { font-weight: 800; }
+.fo-tit { fill: var(--text-2); font: 800 11px var(--font); }
+.fo-num { fill: var(--text-2); font: 500 10.5px var(--font); }
+.fo-lado { fill: var(--text-3); font: 600 9.5px var(--font); }
+.fo-ic { stroke: var(--text-2); stroke-width: 1.5; }
+.fo-cuad { fill: var(--cyan); }
+.fo-rombo--fijo { fill: var(--text-3); }
+.fo-rombo--al { fill: var(--cyan); }
+.fo-nula { stroke: var(--text-3); stroke-width: 1.2; stroke-dasharray: 4 3; }
+.fo-eje { stroke: var(--text-2); stroke-width: 1; }
+.funnel { max-width: 460px; margin: 10px auto 0; }
+.funnel svg { width: 100%; height: auto; display: block; }
+.fu-cono { fill: var(--cyan-dim); stroke: var(--cyan-glow); }
+.fu-pt { fill: var(--cyan); stroke: var(--bg-2); stroke-width: 1.5; }
+.umbral-fig { margin: 12px 0 0; }
+.umbral-fig svg { width: 100%; height: auto; display: block; }
+.um-no { fill: var(--green); } .um-prueba { fill: var(--amber); } .um-tratar { fill: var(--red); } .um-pac { fill: var(--text-1); }
+.um-ley { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 3px; }
+span.um-no { background: var(--green); } span.um-prueba { background: var(--amber); } span.um-tratar { background: var(--red); }
+.forest--c svg { min-width: 0; }
+.forest-estrecho { display: none; }
+@media (max-width: 600px) { .forest-ancho { display: none; } .forest-estrecho { display: block; } }
+@media print { .forest-ancho { display: block !important; } .forest-estrecho { display: none !important; } }

@@ -41,6 +41,8 @@ const dx = L.resultadoCalculo(B("ej-u-dx").calculos[0]);
 t("Diagnóstico de Urgencias: del 15 % al 55 % y al 3 %", Math.round(dx.post.pos.v * 100) === 55 && Math.round(dx.post.neg.v * 100) === 3);
 t("Diagnóstico de Urgencias: LR+ 7 y LR− 0,19", Math.abs(dx.lrp.v - 7) < 0.01 && Math.abs(dx.lrn.v - 0.19) < 0.01);
 t("Revisión de Urgencias: esperar, con validez ámbar", L.decisionPropuesta(B("ej-u-rs")).decision === "esperar" && L.semaforo(B("ej-u-rs"), "validez").color === "ambar");
+const ma = L.resultadoCalculo(B("ej-u-rs").calculos[0]);
+t("Revisión de Urgencias: RR 0,74 (0,50 a 1,10) e I² 74 %, como dice el texto", CA.fmt(ma.aleatorio.v) === "0,74" && CA.fmt(ma.aleatorio.inf) === "0,5" && CA.fmt(ma.aleatorio.sup) === "1,1" && Math.round(ma.i2 * 100) === 74);
 t("Tres descartados en el filtro", lec.filter(l => l.filtro.responde === "no" && L.cerradaPronto(l)).length === 3);
 t("Minicaso AP: la eliminación falla", L.eliminacion(B("ej-m-ap")).estado === "falla");
 t("Minicaso RRR: avisa de la trampa", CA.trampasTratamiento(L.resultadoCalculo(B("ej-m-rrr").calculos[0])).some(a => /Reducción relativa grande/.test(a.texto)));

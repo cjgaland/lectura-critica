@@ -155,6 +155,112 @@ O.bayes.forEach(({ caso, entrada: e, salida: x }) => {
   t("Cuadrante: domina", C.cei({ cn: 900, ch: 1000, en: 1.2, eh: 1.1 }).cuadrante === "domina");
   t("Cuadrante: dominada", C.cei({ cn: 1100, ch: 1000, en: 1.0, eh: 1.1 }).cuadrante === "dominada");
 }
+// ============================================================
+//  Fase 2: supervivencia, metaanálisis, umbrales y kappa
+// ============================================================
+const cerca = (nombre, a, b, tol = 1e-9) => casi(nombre, a, b, tol);
+// MetaSurv: el ejemplo de 16 estudios (HR y varianza)
+{
+  const M = O.metasurv, est = Array.from({ length: M.k }, (_, i) => ({ hr: M["hr" + (i + 1)], v: M["v" + (i + 1)] }));
+  const r = C.metaanalisis({ medida: "hr", estudios: est });
+  t("MetaSurv: calcula", r.ok && r.k === 16);
+  ivCasi("MetaSurv: HR efectos fijos", r.fijo, M.hrFE, M.hrFEInf, M.hrFESup);
+  cerca("MetaSurv: z efectos fijos", r.fijo.z, M.zFE);
+  ivCasi("MetaSurv: HR DerSimonian-Laird", r.aleatorio, M.hrDL, M.hrDLInf, M.hrDLSup);
+  cerca("MetaSurv: p DL", r.aleatorio.p, M.pDL, 1e-6);
+  cerca("MetaSurv: Q", r.q, M.q); cerca("MetaSurv: p de Q", r.pQ, M.pQ, 1e-6);
+  cerca("MetaSurv: I²", r.i2, M.i2); cerca("MetaSurv: I² inf", r.i2Inf, M.i2Inf); cerca("MetaSurv: I² sup", r.i2Sup, M.i2Sup);
+  cerca("MetaSurv: τ²", r.tau2, M.tau2);
+  r.estudios.forEach((x, i) => { cerca(`MetaSurv: estudio ${i + 1} · inf`, x.inf, M["inf" + (i + 1)]); cerca(`MetaSurv: estudio ${i + 1} · peso fijo`, x.peso * 100, M["pesoFE" + (i + 1)]); cerca(`MetaSurv: estudio ${i + 1} · peso aleatorio`, x.pesoAl * 100, M["pesoDL" + (i + 1)]); });
+  cerca("Egger: intercepto", r.egger.b0, M.b0); cerca("Egger: pendiente", r.egger.b1, M.b1); cerca("Egger: ee del intercepto", r.egger.eeB0, M.eeB0);
+  cerca("Egger: p", r.egger.p, M.pEgger, 1e-7); cerca("Egger: IC 90 % inf", r.egger.inf90, M.b0Inf90, 1e-7); cerca("Egger: IC 90 % sup", r.egger.sup90, M.b0Sup90, 1e-7);
+}
+// Parmar: estimar el HR de lo publicado
+{
+  const x = O.parmar.salida, e = O.parmar.entrada, S = (o) => C.supervivencia(o);
+  let r = S({ modo: "obsesp", oe1: e.C4, ee1: e.D4, oc1: e.C5, ec1: e.D5 }); ivCasi("Parmar: observados y esperados", r.hr, x.oeHR, x.oeInf, x.oeSup); cerca("Parmar: varianza (obs/esp)", r.var, x.oeV);
+  r = S({ modo: "oev", oe: e.D14, v: e.D15 }); ivCasi("Parmar: O − E y V", r.hr, x.oev_HR, x.oev_Inf, x.oev_Sup); cerca("Parmar: varianza (O − E)", r.var, x.oev_V);
+  r = S({ modo: "ic", hr: e.D24, li: e.D25, ls: e.D26 }); cerca("Parmar: varianza desde el IC", r.var, x.icV);
+  r = S({ modo: "logrank", ev1: e.D58, ev2: e.D59, p: e.D60 }); cerca("Parmar: O − E desde la p del log-rank", -r.oe, x.lr_OE, 1e-9); ivCasi("Parmar: HR desde la p del log-rank", r.hr, x.lr_HR, x.lr_Inf, x.lr_Sup, 1e-9); cerca("Parmar: varianza (log-rank)", r.var, x.lr_V);
+  r = S({ modo: "logrank", evt: e.D73, p: e.D74 }); casi("Parmar: HR con el total de eventos (1:1)", r.hr.v, x.lrt_HR, 1e-9); cerca("Parmar: varianza (total de eventos)", r.var, x.lrt_V);
+  r = S({ modo: "logrank", evt: e.D87, n1: e.D88, n2: e.D89, p: e.D90 }); casi("Parmar: HR con el total de eventos (no 1:1)", r.hr.v, x.lrn_HR, 1e-9); cerca("Parmar: varianza (no 1:1)", r.var, x.lrn_V);
+  r = S({ modo: "medianas", m1: e.C103, m2: e.C104, ev1: e.D103, ev2: e.D104 }); ivCasi("Parmar: medianas", r.hr, x.med_HR, x.med_Inf, x.med_Sup); cerca("Parmar: varianza (medianas)", r.var, x.med_V);
+  r = S({ modo: "riesgo", e1: e.C114, s1: e.D114, e2: e.C115, s2: e.D115 }); ivCasi("Parmar: eventos y sujetos en un momento t", r.hr, x.t_HR, x.t_Inf, x.t_Sup); cerca("Parmar: varianza (momento t)", r.var, x.t_V);
+  t("Parmar: sentido del log-rank", S({ modo: "logrank", ev1: 40, ev2: 60, p: 0.03, sentido: "contra" }).hr.v > 1);
+  t("Supervivencia: datos incompletos", !S({ modo: "ic", hr: "0,7" }).ok);
+}
+// Metaanálisis: las 18 hojas del Excel
+{
+  const HOJAS = {
+    "OR MH": ["or", "mh", "fijo"], "Peto": ["or", "peto", "fijo"], "OR IV": ["or", "iv", "fijo"], "OR DL": ["or", "mh", "aleatorio"],
+    "RR MH": ["rr", "mh", "fijo"], "RR IV": ["rr", "iv", "fijo"], "RR DL": ["rr", "mh", "aleatorio"],
+    "DR MH": ["dr", "mh", "fijo"], "DR IV": ["dr", "iv", "fijo"], "DR DL": ["dr", "mh", "aleatorio"],
+    "DPM IV": ["dm", "iv", "fijo"], "DPM DL": ["dm", "iv", "aleatorio"], "DEM Hedges": ["hedges", "iv", "fijo"], "DEM Hedges-DL": ["hedges", "iv", "aleatorio"],
+    "DEM Cohen": ["cohen", "iv", "fijo"], "DEM Cohen-DL": ["cohen", "iv", "aleatorio"], "DEM Glass": ["glass", "iv", "fijo"], "DEM Glass-DL": ["glass", "iv", "aleatorio"]
+  };
+  // Hojas con la casilla del intervalo de I² equivocada (miran D39 > B2, casillas vacías): usan siempre la fórmula de «Q ≤ k»
+  const MAL_I2 = new Set(["Peto", "OR IV", "RR IV", "DR IV"]);
+  O.metaanalisis.forEach(({ datos, hoja, filas, salida: x }) => {
+    const [medida, metodo, modelo] = HOJAS[hoja], cont = medida === "dm" || ["hedges", "cohen", "glass"].includes(medida);
+    const estudios = filas.map(f => cont ? { n1: f[0], m1: f[1], d1: f[2], n2: f[3], m2: f[4], d2: f[5] } : { ee: f[0], ne: f[1], ec: f[2], nc: f[3] });
+    const r = C.metaanalisis({ medida, metodo, estudios }), R = r[modelo], nom = `${datos} · ${hoja}`;
+    t(`${nom}: calcula`, r.ok && r.k === filas.length);
+    if (hoja === "DPM DL") {
+      // El Excel lee τ² de una casilla vacía (AA12 en lugar de X12): su «aleatorio» es el fijo. Lo comprobamos y comprobamos nuestro τ² a mano
+      ivCasi(`${nom}: el Excel da el efecto fijo`, r.fijo, x.est, x.inf, x.sup);
+      const w = r.estudios.map(e => 1 / (e.se * e.se)), SW = w.reduce((a, b) => a + b, 0), SW2 = w.reduce((a, b) => a + b * b, 0);
+      cerca(`${nom}: τ² a mano`, r.tau2, Math.max(0, (r.q - r.gl) / (SW - SW2 / SW)));
+    } else if (hoja === "DEM Glass") {
+      // Esta hoja usa en la varianza 2(n − 1) − 3,94 (errata: la mezcla con Hedges); la de efectos aleatorios usa 2(n − 1), como nosotros
+      r.estudios.forEach((e, i) => cerca(`${nom}: Δ del estudio ${i + 1}`, e.v, x["e" + (i + 1)]));
+    } else {
+      ivCasi(`${nom}: efecto combinado`, R, x.est, x.inf, x.sup);
+      cerca(`${nom}: p`, R.p, x.p, 1e-7);
+      // La hoja «DR IV» calcula el % de peso con el error estándar en lugar de con 1/varianza: no se comparan sus pesos
+      r.estudios.forEach((e, i) => { ivCasi(`${nom}: estudio ${i + 1}`, e, x["e" + (i + 1)], x["inf" + (i + 1)], x["sup" + (i + 1)]); if (hoja !== "DR IV") cerca(`${nom}: peso del estudio ${i + 1}`, (modelo === "aleatorio" ? e.pesoAl : e.peso) * 100, x["peso" + (i + 1)]); });
+      if (hoja === "DR IV") { const se = r.estudios.map(e => e.se), S = se.reduce((a, b) => a + b, 0); se.forEach((v, i) => cerca(`${nom}: el Excel pesa con el ee (estudio ${i + 1})`, v / S * 100, x["peso" + (i + 1)])); }
+    }
+    if (hoja !== "DEM Glass") {
+      cerca(`${nom}: Q`, r.q, x.q); cerca(`${nom}: p de Q`, r.pQ, x.pQ, 1e-7);
+      cerca(`${nom}: I² (el Excel no lo limita a 0)`, r.i2, Math.max(0, x.i2));
+      if (!MAL_I2.has(hoja) || r.q <= r.k) { cerca(`${nom}: I² inf`, r.i2Inf, Math.max(0, x.i2Inf)); cerca(`${nom}: I² sup`, r.i2Sup, Math.max(0, x.i2Sup)); }
+      else {
+        // Con Q > k, esas hojas usan la fórmula de «Q ≤ k»: lo comprobamos para dejarlo documentado
+        const k = r.k, seMal = Math.sqrt((1 / (2 * (k - 2))) * (1 - 1 / (3 * Math.pow(k - 2, 2)))), H = Math.sqrt(r.q / r.gl), i2 = h => (h * h - 1) / (h * h);
+        cerca(`${nom}: el Excel usa la fórmula equivocada del IC de I²`, Math.max(0, i2(Math.exp(Math.log(H) - 1.96 * seMal))), Math.max(0, x.i2Inf));
+      }
+    }
+  });
+  // Lo que se corrige: con Q ≤ k, el intervalo de I² de esas hojas sale de la fórmula equivocada
+  const d3 = O.metaanalisis.find(m => m.datos.startsWith("DIC3") && m.hoja === "OR IV"), r3 = C.metaanalisis({ medida: "or", metodo: "iv", estudios: d3.filas.map(f => ({ ee: f[0], ne: f[1], ec: f[2], nc: f[3] })) });
+  t("I²: con Q > k coincide con la hoja buena (MH)", Math.abs(r3.i2Inf - O.metaanalisis.find(m => m.datos.startsWith("DIC3") && m.hoja === "OR MH").salida.i2Inf) < 0.05);
+  const m = C.metaanalisis({ medida: "or", metodo: "mh", estudios: [{ ee: 0, ne: 50, ec: 5, nc: 50 }, { ee: 3, ne: 60, ec: 8, nc: 60 }] });
+  t("Metaanálisis: un estudio con 0 se corrige y se avisa", m.ok && m.estudios[0].cero && C.trampasMeta(m).some(a => /0,5/.test(a.texto)));
+  t("Metaanálisis: hace falta más de un estudio", !C.metaanalisis({ medida: "or", estudios: [{ ee: 3, ne: 60, ec: 8, nc: 60 }] }).ok);
+  const het = C.metaanalisis({ medida: "or", metodo: "mh", estudios: O.metaanalisis.find(m => m.datos.startsWith("DIC3")).filas.map(f => ({ ee: f[0], ne: f[1], ec: f[2], nc: f[3] })) });
+  t("Trampa: heterogeneidad alta", C.trampasMeta(het).some(a => /Heterogeneidad alta/.test(a.texto)));
+  t("Texto del metaanálisis", /5 estudios/.test(C.textoMeta(het)) && /I²/.test(C.textoMeta(het)));
+  t("Semáforo del metaanálisis", ["verde", "ambar", "rojo"].includes(C.semaforoCalculo("metaanalisis", het).color));
+}
+// Umbrales de decisión y kappa
+O.umbrales.forEach(({ caso, entrada: e, salida: x }) => {
+  const r = C.umbrales({ s: e.C50, e: e.D50, dano: e.D52, rprueba: e.D53, beneficio: e.D54, pre: e.B50 });
+  cerca(`${caso}: umbral diagnóstico`, r.dx, x.umbralDx); cerca(`${caso}: umbral terapéutico`, r.tx, x.umbralTx);
+});
+{
+  const U = pre => C.calcular("umbrales", { s: "90", e: "80", dano: "10", rprueba: "1", beneficio: "30", pre });
+  t("Umbrales: decisión (los campos en %, como en la app)", U("30").decision === "prueba" && U("5").decision === "noprueba" && U("80").decision === "tratar");
+  t("En %: «1» es 1 %", Math.abs(C.calcular("diagnostico", { a: 8, b: 40, c: 2, d: 950, pre: "1" }).pre - 0.01) < 1e-12 && Math.abs(C.porc("12,5 %") - 0.125) < 1e-12);
+}
+O.kappa.forEach(({ caso, entrada: e, salida: x }) => {
+  const r2 = C.kappa([[e.C7, e.D7], [e.C8, e.D8]]);
+  cerca(`${caso}: concordancia observada`, r2.po, x.po); cerca(`${caso}: esperada`, r2.pe, x.pe); ivCasi(`${caso}: kappa`, r2.kappa, x.kappa, x.kappaInf, x.kappaSup);
+  const k = e.I28, M = Array.from({ length: k }, (_, i) => Array.from({ length: k }, (_, j) => e["DEFGHI"[j] + (21 + i)] || 0)), r = C.kappa(M);
+  cerca(`${caso}: ponderada · observada`, r.poW, x.poP); cerca(`${caso}: ponderada · esperada`, r.peW, x.peP); cerca(`${caso}: kappa ponderado`, r.kappaW, x.kappaP);
+  cerca(`${caso}: sin ponderar · observada`, r.po, x.poN); cerca(`${caso}: sin ponderar · esperada`, r.pe, x.peN);
+});
+t("Kappa: fuerza", C.kappaFuerza(0.7) === "buena" && C.kappaFuerza(0.1) === "insignificante");
+
 // Formato español
 t("Formato", C.fmt(40, 0) === "40" && C.pct(0.4, 0) === "40 %" && C.fmt(0.9989) === "0,999" && C.fmt(1234.5, 1) === "1234,5" && C.fmt(0.1 + 0.2, 2) === "0,3" && C.pct(0.125) === "12,5 %" && C.fmt(Infinity) === "∞");
 
