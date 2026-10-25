@@ -4,12 +4,13 @@
 //  Al cambiar cualquier archivo, incrementa CACHE_NAME.
 // ============================================================
 
-const CACHE_NAME = "lecturacritica-v1";
+const CACHE_NAME = "lecturacritica-v2";
 
 const ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
+  "./calculos.js",
   "./logic.js",
   "./plantillas.js",
   "./xlsx.js",

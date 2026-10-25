@@ -14,6 +14,7 @@ Siete pasos:
 
 - Ocho plantillas: ensayo clínico, revisión sistemática, diagnóstico, cohortes, casos y controles, cualitativo, evaluación económica y reglas de predicción clínica. Las preguntas y las pistas son propias; siguen los criterios de las plantillas de CASPe, que se citan y se enlazan (https://redcaspe.org/materiales/).
 - Si el estudio falla en las preguntas de eliminación, la app avisa de que no merece la pena seguir.
+- Calculadoras de resultados, en la pregunta donde se necesitan y sueltas: tratamiento (RR, RRR, RAR, NNT, OR, análisis de sensibilidad de las pérdidas), diagnóstico (sensibilidad, especificidad, cocientes de probabilidad, probabilidad tras la prueba y nomograma de Fagan), pruebas con varios niveles, odds ratio y coste-efectividad incremental. Comprobadas con las calculadoras Excel de CASPe.
 
 Los datos se guardan solo en el dispositivo; para trabajar en equipo se comparte la copia de seguridad.
 
@@ -24,9 +25,10 @@ Servir la carpeta y abrir `index.html`:
 
     python3 -m http.server 8775
 
-Tests de la lógica:
+Tests de la lógica y de las calculadoras:
 
     node tests/logic.test.mjs
+    node tests/calculos.test.mjs
 
 Documentación técnica y decisiones: ver `CLAUDE.md`.
 

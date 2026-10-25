@@ -9,13 +9,21 @@
 // ============================================================
 (function () {
   "use strict";
-  const L = window.Logica, PL = window.Plantillas;
+  const L = window.Logica, PL = window.Plantillas, CA = window.Calculos;
 
   // ---------- Versión y novedades ----------
   // Al publicar cambios: añadir una entrada AL PRINCIPIO de NOVEDADES, poner su versión en los ?v= de index.html, en
   // APP_VERSION y subir CACHE_NAME en sw.js. Formato de versión: AAAA.NN.
-  const APP_VERSION = "2026.01";
+  const APP_VERSION = "2026.02";
   const NOVEDADES = [
+    { version: "2026.02", fecha: "Octubre 2026", titulo: "Calculadoras de resultados", cambios: [
+      "Calculadora de tratamiento: riesgos, riesgo relativo, reducción relativa y absoluta, NNT (para beneficiar o para dañar, también cuando el intervalo cruza el «sin efecto») y odds ratio, con sus intervalos de confianza.",
+      "¿Y si los perdidos hubieran tenido el evento? Análisis de sensibilidad de las pérdidas con tres supuestos, y NNT para tu paciente según su riesgo.",
+      "Calculadora de diagnóstico: sensibilidad, especificidad, valores predictivos, cocientes de probabilidad y probabilidad antes y después de la prueba, con el nomograma de Fagan y tu umbral de acción.",
+      "También: pruebas con varios niveles, probabilidad tras la prueba desde la sensibilidad y la especificidad, odds ratio de casos y controles, y coste-efectividad incremental.",
+      "Las calculadoras aparecen en la pregunta de la plantilla donde se necesitan, proponen el color del semáforo de «¿Qué dice?» y escriben el resultado en lenguaje llano, con un dibujo de 100 personas.",
+      "Avisos de las trampas más habituales: reducción relativa grande con absoluta pequeña, intervalos que incluyen el «sin efecto», pérdidas, odds ratio frente a riesgo relativo, valor predictivo y prevalencia.",
+      "Comprobadas con las calculadoras Excel de CASPe: dan los mismos resultados (salvo errores de las hojas, que se corrigen)."] },
     { version: "2026.01", fecha: "Octubre 2026", titulo: "Primera versión: leer un artículo con método", cambios: [
       "Lectura guiada en 7 pasos: tu pregunta (PICO) y el artículo, filtro de dos minutos, tipo de estudio, ¿es válido?, ¿qué dice?, ¿me sirve? y veredicto.",
       "Ocho plantillas con preguntas y pistas propias: ensayo clínico, revisión sistemática, diagnóstico, cohortes, casos y controles, cualitativo, evaluación económica y reglas de predicción clínica.",
@@ -139,7 +147,7 @@
       <div class="entradas">
         <a class="entrada" href="#/lecturas/nueva"><span class="entrada-ic">📄</span><b>Leer un artículo</b><span>De tu pregunta a la decisión, con la plantilla de su tipo de estudio.</span></a>
         <a class="entrada" href="#/tipo"><span class="entrada-ic">🧭</span><b>¿Qué tipo de estudio tengo?</b><span>Unas preguntas sencillas que te llevan a la plantilla adecuada.</span></a>
-        <div class="entrada entrada--prox"><span class="entrada-ic">🧮</span><b>Calcular</b><span>NNT, cocientes de probabilidad, probabilidad tras la prueba y nomograma de Fagan.</span><span class="fase-prox">Próximamente</span></div>
+        <a class="entrada" href="#/calc"><span class="entrada-ic">🧮</span><b>Calcular</b><span>NNT, cocientes de probabilidad, probabilidad tras la prueba con el nomograma de Fagan, odds ratio y coste-efectividad.</span></a>
       </div>
       ${facil(`<p>Leer un artículo es como <b>comprar un coche de segunda mano</b>. Primero miras si es el coche que buscas: si no lo es, no pierdes el tiempo. Después compruebas que no tiene trampa: el kilometraje, el motor, los papeles (<b>¿es fiable?</b>). Luego ves qué ofrece de verdad (<b>¿cuánto consume, cuánto corre?</b>). Y por último te preguntas si te sirve a ti: en tu garaje, con tu presupuesto, para tus viajes (<b>¿me sirve?</b>).</p>
         <p>Por eso la lectura crítica son tres preguntas, en este orden: <b>¿son válidos los resultados?, ¿cuáles son? y ¿me sirven?</b> Si la primera falla, no sigas.</p>`)}
@@ -299,11 +307,13 @@
   };
   function preguntaHtml(l, pl, q) {
     const r = L.resp(l, q.id), num = L.numeroDe(pl, q.id), v = r.valor;
-    const estado = q.resp === "abierta" ? (lleno(r.nota) ? "hecha" : "") : v ? `r-${v}` : "";
+    const estado = q.resp === "abierta" ? (L.contestada(l, q) ? "hecha" : "") : v ? `r-${v}` : "";
     const resp = q.resp === "abierta"
-      ? `<textarea class="txt-in" data-q="${q.id}" data-f="nota" rows="3" placeholder="Escribe el resultado tal como lo da el artículo (cifras e intervalos de confianza)">${esc(r.nota)}</textarea>
-         ${q.calc ? `<p class="calc-prox">🧮 La calculadora para esta pregunta llegará en la próxima versión. Mientras, escribe aquí lo que dice el artículo.</p>` : ""}`
+      ? `${q.calc ? calcEnPregunta(l, pl, q) : ""}
+         <label class="nota-lbl" for="nota-${q.id}">Resultado${q.calc ? " (escríbelo tú o pulsa «Usar en la respuesta»)" : ""}</label>
+         <textarea class="txt-in" id="nota-${q.id}" data-q="${q.id}" data-f="nota" rows="3" placeholder="Escribe el resultado tal como lo da el artículo (cifras e intervalos de confianza)">${esc(r.nota)}</textarea>`
       : `${segResp(`data-act="resp" data-q="${q.id}"`, v, q.resp === "sn" ? [["si", "Sí"], ["no", "No"]] : undefined)}
+         ${q.calc ? calcEnPregunta(l, pl, q) : ""}
          <details class="nota-q"${lleno(r.nota) ? " open" : ""}><summary>Nota${lleno(r.nota) ? "" : " (¿dónde lo ves en el artículo?)"}</summary><textarea class="txt-in" data-q="${q.id}" data-f="nota" rows="2" placeholder="Dónde lo ves en el artículo, dudas, comentarios">${esc(r.nota)}</textarea></details>`;
     return `<article class="preg ${estado}${q.elim ? " preg--elim" : ""}" data-pq="${q.id}">
       <div class="preg-cab"><span class="preg-num">${num}</span><div class="preg-txt">${q.elim ? `<span class="badge badge--elim">De eliminación</span>` : ""}<h3>${esc(q.texto)}</h3></div></div>
@@ -346,6 +356,237 @@
         <button type="button" class="icon-btn icon-btn--mini" data-act="del-con" data-id="${c.id}" aria-label="Quitar">✕</button></div>`).join("")}
       <button type="button" class="btn btn--ghost" data-act="nuevo-con">+ Añadir factor</button></div>`;
   }
+
+  // ---------- Calculadoras: formularios y resultados ----------
+  // bind: atributos que identifican la calculadora (data-calc="<id>" dentro de una lectura; data-cs="<tipo>" en las sueltas)
+  const cIn = (bind, f, v, o = {}) => `<input class="txt-in calc-in" ${bind} data-f="${f}" value="${esc(v)}" inputmode="${o.modo || "numeric"}" placeholder="${esc(o.ph || "")}" aria-label="${esc(o.aria || f)}" autocomplete="off" />`;
+  const resBox = (et, val, ic, o = {}) => `<div class="res${o.main ? " res--main" : ""}"><span class="res-et">${et}</span><b class="res-v">${val}</b>${ic ? `<span class="res-ic">IC 95 %: ${ic}</span>` : ""}${o.sub ? `<span class="res-sub">${o.sub}</span>` : ""}</div>`;
+  const avisosCalc = l => l.map(avisoHtml).join("");
+  function calcForm(tipo, e, niveles, bind) {
+    if (tipo === "tratamiento") return `
+      <div class="tabla-calc tabla-calc--3"><span></span><b>Grupo control<small>o no expuestos</small></b><b>Grupo intervención<small>o expuestos</small></b>
+        <span>Incluidos</span>${cIn(bind, "nc", e.nc, { aria: "Incluidos en el grupo control" })}${cIn(bind, "ne", e.ne, { aria: "Incluidos en el grupo intervención" })}
+        <span>Perdidos <small>(opcional)</small></span>${cIn(bind, "pc", e.pc, { aria: "Perdidos en el grupo control", ph: "0" })}${cIn(bind, "pe", e.pe, { aria: "Perdidos en el grupo intervención", ph: "0" })}
+        <span>Con el evento</span>${cIn(bind, "ec", e.ec, { aria: "Con el evento en el grupo control" })}${cIn(bind, "ee", e.ee, { aria: "Con el evento en el grupo intervención" })}</div>
+      <p class="calc-ayuda">Los evaluados son los incluidos menos los perdidos. Si el artículo da porcentajes, multiplica: 12 % de 150 = 18.</p>
+      <details class="calc-mas"${lleno(e.peer) || lleno(e.f) ? " open" : ""}><summary>NNT para tu paciente</summary>
+        <div class="tabla-calc tabla-calc--2"><span>Su riesgo sin tratar, en % (PEER)</span>${cIn(bind, "peer", e.peer, { modo: "decimal", ph: "p. ej. 5", aria: "Riesgo basal de tu paciente" })}
+        <span>O bien: cuántas veces más riesgo tiene que el grupo control (F)</span>${cIn(bind, "f", e.f, { modo: "decimal", ph: "p. ej. 2", aria: "Factor F" })}</div></details>`;
+    if (tipo === "or") return `
+      <div class="tabla-calc tabla-calc--3"><span></span><b>Casos<small>con el desenlace</small></b><b>Controles<small>sin el desenlace</small></b>
+        <span>Expuestos</span>${cIn(bind, "a", e.a, { aria: "Casos expuestos" })}${cIn(bind, "b", e.b, { aria: "Controles expuestos" })}
+        <span>No expuestos</span>${cIn(bind, "c", e.c, { aria: "Casos no expuestos" })}${cIn(bind, "d", e.d, { aria: "Controles no expuestos" })}</div>`;
+    const prePost = `<div class="tabla-calc tabla-calc--2">
+        <span>Probabilidad antes de la prueba en tu medio, en %${tipo === "bayes" ? "" : " <small>(opcional: si no, la del estudio)</small>"}</span>${cIn(bind, "pre", e.pre, { modo: "decimal", ph: tipo === "bayes" ? "p. ej. 20" : "la del estudio", aria: "Probabilidad antes de la prueba" })}
+        <span>Tu umbral de acción, en % <small>(opcional: por encima tratarías)</small></span>${cIn(bind, "umbral", e.umbral, { modo: "decimal", ph: "p. ej. 50", aria: "Umbral de acción" })}</div>`;
+    if (tipo === "diagnostico") return `
+      <div class="tabla-calc tabla-calc--3"><span></span><b>Con la enfermedad<small>prueba de referencia +</small></b><b>Sin la enfermedad<small>prueba de referencia −</small></b>
+        <span>Prueba positiva</span>${cIn(bind, "a", e.a, { aria: "Verdaderos positivos (a)", ph: "a" })}${cIn(bind, "b", e.b, { aria: "Falsos positivos (b)", ph: "b" })}
+        <span>Prueba negativa</span>${cIn(bind, "c", e.c, { aria: "Falsos negativos (c)", ph: "c" })}${cIn(bind, "d", e.d, { aria: "Verdaderos negativos (d)", ph: "d" })}</div>
+      ${prePost}`;
+    if (tipo === "bayes") return `
+      <div class="tabla-calc tabla-calc--2"><span>Sensibilidad, en %</span>${cIn(bind, "s", e.s, { modo: "decimal", ph: "p. ej. 85", aria: "Sensibilidad" })}
+        <span>Especificidad, en %</span>${cIn(bind, "e", e.e, { modo: "decimal", ph: "p. ej. 90", aria: "Especificidad" })}</div>${prePost}`;
+    if (tipo === "niveles") return `
+      <div class="tabla-niv"><b>Nivel o resultado</b><b>Con la enfermedad</b><b>Sin la enfermedad</b><span></span>
+        ${niveles.map((n, i) => `<input class="txt-in calc-in calc-in--txt" ${bind} data-nv="${i}" data-f="nombre" value="${esc(n.nombre)}" placeholder="Nivel ${i + 1}" aria-label="Nombre del nivel ${i + 1}" autocomplete="off" />
+          <input class="txt-in calc-in" ${bind} data-nv="${i}" data-f="a" value="${esc(n.a)}" inputmode="numeric" aria-label="Con la enfermedad, nivel ${i + 1}" autocomplete="off" />
+          <input class="txt-in calc-in" ${bind} data-nv="${i}" data-f="b" value="${esc(n.b)}" inputmode="numeric" aria-label="Sin la enfermedad, nivel ${i + 1}" autocomplete="off" />
+          <button type="button" class="icon-btn icon-btn--mini" data-act="nivel-del" ${bind} data-nv="${i}" aria-label="Quitar el nivel"${niveles.length <= 2 ? " disabled" : ""}>✕</button>`).join("")}</div>
+      ${niveles.length < 5 ? `<button type="button" class="btn btn--ghost" data-act="nivel-nuevo" ${bind}>+ Añadir nivel</button>` : ""}
+      <div class="tabla-calc tabla-calc--2"><span>Probabilidad antes de la prueba en tu medio, en % <small>(opcional)</small></span>${cIn(bind, "pre", e.pre, { modo: "decimal", ph: "la del estudio", aria: "Probabilidad antes de la prueba" })}</div>`;
+    if (tipo === "cei") return `
+      <div class="tabla-calc tabla-calc--3"><span></span><b>Alternativa nueva</b><b>Alternativa habitual</b>
+        <span>Coste por paciente (€)</span>${cIn(bind, "cn", e.cn, { modo: "decimal", aria: "Coste de la nueva" })}${cIn(bind, "ch", e.ch, { modo: "decimal", aria: "Coste de la habitual" })}
+        <span>Efecto por paciente</span>${cIn(bind, "en", e.en, { modo: "decimal", aria: "Efecto de la nueva" })}${cIn(bind, "eh", e.eh, { modo: "decimal", aria: "Efecto de la habitual" })}</div>
+      <div class="tabla-calc tabla-calc--2"><span>Unidad del efecto</span><input class="txt-in calc-in calc-in--txt" ${bind} data-f="unidad" value="${esc(e.unidad)}" placeholder="AVAC, año de vida, caso evitado…" aria-label="Unidad del efecto" autocomplete="off" /></div>`;
+    return "";
+  }
+  function calcRes(tipo, e, niveles, nombre) {
+    const r = CA.calcular(tipo, Object.assign({}, e, { niveles }));
+    if (!r.ok) return r.errores.length && Object.values(e).some(lleno) ? `<div class="note">ℹ ${esc(r.errores[0])}</div>` : `<p class="calc-vacia">Escribe los datos y verás aquí los resultados.</p>`;
+    const F = CA.fmt, P = CA.pct, IC = CA.icTxt;
+    if (tipo === "tratamiento") {
+      const n = r.nnt, peer = CA.prob(e.peer), f = CA.num(e.f);
+      const ancho = CA.incluye(r.rr, 1) || r.rr.sup / r.rr.inf > 4;
+      const tm = `${L.URL_TM}#/dos-proporciones?d=${encodeURIComponent(JSON.stringify({ p1: F(r.rc.v * 100, 1).replace(",", "."), efecto: "p2", p2: F(r.re.v * 100, 1).replace(",", ".") }))}`;
+      const sens = (r.perdidas.c || r.perdidas.e) ? sensHtml(e, r) : "";
+      return `<div class="res-grid">
+          ${resBox("Riesgo control", P(r.rc.v), IC(r.rc, P))}${resBox("Riesgo intervención", P(r.re.v), IC(r.re, P))}
+          ${resBox("Riesgo relativo (RR)", F(r.rr.v), IC(r.rr))}${resBox(r.rrr.v >= 0 ? "Reducción relativa (RRR)" : "Aumento relativo", P(Math.abs(r.rrr.v), 0), r.rrr.v >= 0 ? IC(r.rrr, P) : IC({ inf: -r.rrr.sup, sup: -r.rrr.inf }, P))}
+          ${resBox(r.rar.v >= 0 ? "Reducción absoluta (RAR)" : "Aumento absoluto", P(Math.abs(r.rar.v)), r.rar.v >= 0 ? IC(r.rar, P) : IC({ inf: -r.rar.sup, sup: -r.rar.inf }, P))}
+          ${resBox(n.v === Infinity ? "NNT" : n.tipo === "NNTB" ? "NNT para beneficiar (NNTB)" : "NNT para dañar (NNTD)", n.v === Infinity ? "∞" : F(Math.ceil(n.v), 0), n.cruza ? `NNTB ${F(n.nntb, 1)} a ∞ a NNTD ${F(n.nntd, 1)}` : `${F(n.inf, 1)} a ${F(n.sup, 1)}`, { main: true, sub: n.v === Infinity ? "" : "se redondea hacia arriba" })}
+          ${resBox("Odds ratio (OR)", F(r.or.v), IC(r.or))}
+        </div>
+        <p class="llano">${esc(CA.textoTratamiento(r, nombre))}</p>
+        ${pictograma(r)}
+        ${peer > 0 || f > 0 ? `<div class="res-grid res-grid--2">${peer > 0 ? resBox("NNT para tu paciente (con su riesgo)", isFinite(CA.nntPaciente(peer, r.rrr.v)) ? F(Math.ceil(CA.nntPaciente(peer, r.rrr.v)), 0) : "—", "", { sub: `Riesgo sin tratar ${P(peer)} × RRR ${P(Math.abs(r.rrr.v), 0)}` }) : ""}${f > 0 ? resBox("NNT para tu paciente (con F)", F(Math.ceil(CA.nntConF(r.nnt.v, f)), 0), "", { sub: `NNT del estudio ÷ ${F(f)}` }) : ""}</div>` : ""}
+        ${sens}
+        ${avisosCalc(CA.trampasTratamiento(r))}
+        ${ancho ? `<p class="calc-enlace">¿Tenía el estudio muestra suficiente? <a href="${tm}" target="_blank" rel="noopener">Calcúlalo en Tamaño Muestral ↗</a></p>` : ""}`;
+    }
+    if (tipo === "or") return `<div class="res-grid res-grid--2">${resBox("Odds ratio (OR)", F(r.or.v), IC(r.or), { main: true })}${resBox("Expuestos", `${P(r.expCasos, 0)} · ${P(r.expControles, 0)}`, "", { sub: "de los casos · de los controles" })}</div>
+        <p class="llano">${esc(CA.textoOR(r))}</p>${avisosCalc(CA.trampasOR(r))}`;
+    if (tipo === "diagnostico" || tipo === "bayes") {
+      const umbral = CA.prob(e.umbral), dx = tipo === "diagnostico";
+      const lineas = [{ lr: r.lrp.v, et: "Positivo", c: "pos" }, { lr: r.lrn.v, et: "Negativo", c: "neg" }];
+      return `<div class="res-grid">
+          ${dx ? resBox("Sensibilidad", P(r.s.v), IC(r.s, P)) + resBox("Especificidad", P(r.e.v), IC(r.e, P)) : ""}
+          ${resBox("LR+ (cociente positivo)", F(r.lrp.v), dx ? IC(r.lrp) : "", { main: true, sub: CA.LR_FUERZA_TXT[CA.lrFuerza(r.lrp.v)] })}
+          ${resBox("LR− (cociente negativo)", F(r.lrn.v), dx ? IC(r.lrn) : "", { main: true, sub: CA.LR_FUERZA_TXT[CA.lrFuerza(r.lrn.v)] })}
+          ${dx ? resBox("Valor predictivo positivo", P(r.vpp.v), IC(r.vpp, P), { sub: "en la prevalencia del estudio" }) + resBox("Valor predictivo negativo", P(r.vpn.v), IC(r.vpn, P), { sub: "en la prevalencia del estudio" }) : ""}
+        </div>
+        <h4 class="calc-h">Tu paciente: antes y después de la prueba</h4>
+        <div class="res-grid res-grid--3">
+          ${resBox("Antes de la prueba", P(r.pre), "", { sub: dx && !r.prePropia ? "prevalencia del estudio" : "la que has escrito" })}
+          ${resBox("Si da positivo", P(r.post.pos.v), dx ? IC(r.post.pos, P) : "", { main: true })}
+          ${resBox("Si da negativo", P(r.post.neg.v), dx ? IC(r.post.neg, P) : "", { main: true })}
+        </div>
+        ${umbral > 0 && umbral < 1 ? `<p class="llano">${esc(umbralTxt(r, umbral))}</p>` : ""}
+        ${faganSvg(r.pre, lineas, umbral)}
+        ${dx ? `<details class="calc-mas"><summary>Más medidas</summary><div class="res-grid">${resBox("Odds ratio diagnóstica", F(r.ord.v, 1), IC(r.ord, x => F(x, 1)))}${resBox("Exactitud", P(r.exactitud.v), IC(r.exactitud, P))}${resBox("Prevalencia del estudio", P(r.prevalencia.v), IC(r.prevalencia, P))}${resBox("Índice de Youden", F(r.youden), "")}${resBox("Falsos positivos", P(r.pfp.v), IC(r.pfp, P))}${resBox("Falsos negativos", P(r.pfn.v), IC(r.pfn, P))}</div></details>` : ""}
+        ${dx ? avisosCalc(CA.trampasDiagnostico(r)) : ""}`;
+    }
+    if (tipo === "niveles") return `<div class="tabla-scroll"><table class="tabla-res"><thead><tr><th>Nivel</th><th>LR (IC 95 %)</th><th>Si da este resultado</th></tr></thead><tbody>
+        ${r.filas.map((x, i) => `<tr><td>${esc(x.nombre || "Nivel " + (i + 1))}</td><td><b>${F(x.lr.v)}</b> <small>${IC(x.lr)}</small><br><small>${esc(CA.LR_FUERZA_TXT[CA.lrFuerza(x.lr.v)])}</small></td><td><b>${P(x.post.v)}</b> <small>${IC(x.post, P)}</small></td></tr>`).join("")}</tbody></table></div>
+        <p class="calc-ayuda">Probabilidad antes de la prueba: ${P(r.pre)}${r.prePropia ? "" : " (la del estudio)"}.${r.filas.some(x => x.cero) ? " Algún nivel tiene un 0: se suma 0,5 a ese nivel." : ""}</p>
+        ${faganSvg(r.pre, r.filas.map((x, i) => ({ lr: x.lr.v, et: x.nombre || "Nivel " + (i + 1), c: "n" + i })), NaN)}`;
+    if (tipo === "cei") return `<div class="res-grid res-grid--3">${resBox("Diferencia de coste", F(r.dC, 0) + " €", "")}${resBox("Diferencia de efecto", F(r.dE, 3), "", { sub: esc(e.unidad || "") })}${resBox("RCEI", isFinite(r.rcei) ? F(r.rcei, 0) + " €" : "—", "", { main: true, sub: isFinite(r.rcei) ? `por ${esc(e.unidad || "unidad de efecto")}` : "" })}</div>
+        <p class="llano">${esc(CA.textoCEI(r, e.unidad))}</p><div class="note">ℹ ${esc(CA.CUADRANTES[r.cuadrante])}</div>`;
+    return "";
+  }
+  function umbralTxt(r, u) {
+    const P = CA.pct, pos = r.post.pos.v, neg = r.post.neg.v;
+    if (r.pre >= u && neg >= u) return `Ya estás por encima de tu umbral (${P(u)}) y un negativo no te baja de él: la prueba no cambiará lo que haces.`;
+    if (r.pre < u && pos < u) return `Estás por debajo de tu umbral (${P(u)}) y ni un positivo te hace cruzarlo: la prueba no cambiará lo que haces.`;
+    return `Con tu umbral del ${P(u)}, ${r.pre < u ? "un positivo te hace cruzarlo" : "un negativo te baja de él"}: la prueba sí puede cambiar lo que haces.`;
+  }
+  const nntCorto = n => n.v === Infinity ? "∞" : `${n.tipo} ${CA.fmt(n.v, 1)} (${CA.nntIcTxt(n)})`;
+  // Análisis de sensibilidad de las pérdidas: los tres supuestos
+  function sensHtml(e, r) {
+    const fila = (nom, x) => x && x.ok ? `<tr><td>${esc(nom)}</td><td>${CA.pct(x.rc.v)}</td><td>${CA.pct(x.re.v)}</td><td>${CA.pct(x.rar.v)}</td><td>${esc(nntCorto(x.nnt))}</td></tr>` : "";
+    const sup = Object.keys(CA.SUPUESTOS).map(k => [k, CA.supuesto(e, k, r)]);
+    const cambia = sup.some(([, x]) => x && x.ok && (Math.sign(x.rar.v) !== Math.sign(r.rar.v) || CA.incluye(x.rr, 1) !== CA.incluye(r.rr, 1)));
+    return `<details class="calc-mas"${cambia ? " open" : ""}><summary>¿Y si los perdidos hubieran tenido el evento? (análisis de sensibilidad)</summary>
+      <div class="tabla-scroll"><table class="tabla-res"><thead><tr><th>Supuesto</th><th>Riesgo control</th><th>Riesgo intervención</th><th>RAR</th><th>NNT</th></tr></thead><tbody>
+        <tr class="fila-base"><td>Solo los evaluados</td><td>${CA.pct(r.rc.v)}</td><td>${CA.pct(r.re.v)}</td><td>${CA.pct(r.rar.v)}</td><td>${esc(nntCorto(r.nnt))}</td></tr>
+        ${sup.map(([k, x]) => fila(CA.SUPUESTOS[k].nom, x)).join("")}</tbody></table></div>
+      <p class="calc-ayuda">${Object.values(CA.SUPUESTOS).map(s => `<b>${esc(s.nom)}</b>: ${esc(s.txt)}`).join(" ")}</p>
+      ${cambia ? `<div class="warn">⚠ La conclusión cambia según lo que les pasara a los perdidos: el resultado no es robusto.</div>` : `<div class="note">ℹ La conclusión se mantiene en todos los supuestos: el resultado es robusto frente a las pérdidas.</div>`}</details>`;
+  }
+  // 100 personas en cada grupo: las coloreadas tienen el evento
+  function pictograma(r) {
+    const bloque = (p, tit) => {
+      const n = Math.round(p * 100);
+      return `<figure class="picto"><svg viewBox="0 0 100 100" role="img" aria-label="${esc(tit)}: ${n} de cada 100">${Array.from({ length: 100 }, (_, i) => `<circle cx="${5 + (i % 10) * 10}" cy="${5 + Math.floor(i / 10) * 10}" r="3.6" class="${i < n ? "pic-si" : "pic-no"}"/>`).join("")}</svg><figcaption><b>${n}</b> de cada 100 · ${esc(tit)}</figcaption></figure>`;
+    };
+    return `<div class="pictos">${bloque(r.rc.v, "sin la intervención")}${bloque(r.re.v, "con la intervención")}</div>`;
+  }
+  // Nomograma de Fagan: probabilidad previa (izquierda), LR (centro) y posterior (derecha)
+  function faganSvg(pre, lineas, umbral) {
+    const W = 400, H = 400, M = 24, X = [70, 185, 290], g = CA.faganGeo(H, M), P = CA.pct;
+    const pl = p => p * 100 >= 1 ? CA.fmt(p * 100, 1) : CA.fmt(p * 100, 1);
+    const ejeP = (x, yf, lado) => CA.P_TICKS.map(p => `<line x1="${x - 4}" x2="${x + 4}" y1="${yf(p)}" y2="${yf(p)}" class="fg-tick"/><text x="${x + (lado < 0 ? -8 : 8)}" y="${yf(p) + 3}" text-anchor="${lado < 0 ? "end" : "start"}" class="fg-txt">${pl(p)}</text>`).join("");
+    const ETQ_LR = [0.001, 0.01, 0.1, 0.5, 1, 2, 10, 100, 1000];   // en el eje central no caben todas las etiquetas
+    const ejeLR = CA.LR_TICKS.map(v => `<line x1="${X[1] - 4}" x2="${X[1] + 4}" y1="${g.yLR(v)}" y2="${g.yLR(v)}" class="fg-tick"/>${ETQ_LR.includes(v) ? `<text x="${X[1] + 8}" y="${g.yLR(v) + 3}" class="fg-txt">${CA.fmt(v, 3)}</text>` : ""}`).join("");
+    const lin = lineas.filter(x => isFinite(x.lr) && x.lr > 0).map(x => {
+      const post = CA.bayes(pre, x.lr), y1 = g.yPre(pre), y2 = g.yPost(post);
+      return `<line x1="${X[0]}" y1="${y1}" x2="${X[2]}" y2="${y2}" class="fg-lin fg-lin--${x.c}"/><circle cx="${X[2]}" cy="${y2}" r="4" class="fg-pt fg-pt--${x.c}"/><text x="${X[2] + 36}" y="${y2 + 4}" class="fg-et fg-et--${x.c}">${esc(x.et)} ${P(post, 0)}</text>`;
+    }).join("");
+    const um = umbral > 0 && umbral < 1 ? `<line x1="${X[2] - 24}" x2="${X[2] + 32}" y1="${g.yPost(umbral)}" y2="${g.yPost(umbral)}" class="fg-umbral"/><text x="${X[2] + 36}" y="${g.yPost(umbral) + 3}" class="fg-txt fg-txt--um">Umbral ${P(umbral, 0)}</text>` : "";
+    const resumen = lineas.filter(x => isFinite(x.lr)).map(x => `${x.et}: ${P(CA.bayes(pre, x.lr))}`).join("; ");
+    return `<figure class="fagan"><svg viewBox="0 0 ${W} ${H + 24}" role="img" aria-label="Nomograma de Fagan. Antes de la prueba ${P(pre)}. ${esc(resumen)}">
+      <text x="${X[0]}" y="14" text-anchor="middle" class="fg-tit">Antes (%)</text><text x="${X[1]}" y="14" text-anchor="middle" class="fg-tit">LR</text><text x="${X[2]}" y="14" text-anchor="middle" class="fg-tit">Después (%)</text>
+      <g transform="translate(0,16)">
+        <line x1="${X[0]}" x2="${X[0]}" y1="${g.yPre(0.001)}" y2="${g.yPre(0.999)}" class="fg-eje"/><line x1="${X[1]}" x2="${X[1]}" y1="${g.yLR(1000)}" y2="${g.yLR(0.001)}" class="fg-eje"/><line x1="${X[2]}" x2="${X[2]}" y1="${g.yPost(0.999)}" y2="${g.yPost(0.001)}" class="fg-eje"/>
+        ${ejeP(X[0], g.yPre, -1)}${ejeLR}${ejeP(X[2], g.yPost, 1).replace(/class="fg-txt"/g, 'class="fg-txt fg-txt--r"')}
+        ${um}${lin}<circle cx="${X[0]}" cy="${g.yPre(pre)}" r="5" class="fg-pre"/>
+      </g></svg><figcaption>Nomograma de Fagan: une la probabilidad antes de la prueba con el cociente de probabilidad y lee la de después.</figcaption></figure>`;
+  }
+  // Una calculadora dentro de una pregunta de la lectura
+  function calcCard(l, c, q) {
+    const bind = `data-calc="${c.id}"`, info = CA.CALCS[c.tipo];
+    return `<div class="calc-card" data-calcid="${c.id}">
+      <div class="calc-cab"><span class="calc-tag">🧮 ${esc(info.titulo)}</span><button type="button" class="icon-btn icon-btn--mini" data-act="calc-del" data-id="${c.id}" aria-label="Quitar esta calculadora">✕</button></div>
+      ${c.tipo === "tratamiento" ? `<input class="txt-in" ${bind} data-f="nombre" value="${esc(c.nombre)}" placeholder="Desenlace (por ejemplo, empeoramiento no detectado)" list="dl-des" aria-label="Desenlace" autocomplete="off" />` : ""}
+      ${calcForm(c.tipo, c.entrada, c.niveles, bind)}
+      <div data-zcalc="${c.id}">${calcRes(c.tipo, c.entrada, c.niveles, c.nombre)}</div>
+      <div class="toolbar"><button type="button" class="btn" data-act="calc-usar" data-id="${c.id}" data-q="${q.id}">Usar en la respuesta</button></div>
+    </div>`;
+  }
+  function calcResumen(l, c) {
+    const r = L.resultadoCalculo(c);
+    if (!r.ok) return "";
+    const t = c.tipo === "tratamiento" ? `${c.nombre ? c.nombre + ": " : ""}RR ${CA.fmt(r.rr.v)} (${CA.icTxt(r.rr)}); RAR ${CA.pct(r.rar.v)} (${CA.icTxt(r.rar, CA.pct)}); ${CA.nntTxt(r.nnt)}`
+      : c.tipo === "diagnostico" ? `LR+ ${CA.fmt(r.lrp.v)} (${CA.icTxt(r.lrp)}); LR− ${CA.fmt(r.lrn.v)} (${CA.icTxt(r.lrn)}); sensibilidad ${CA.pct(r.s.v)} (${CA.icTxt(r.s, CA.pct)}); especificidad ${CA.pct(r.e.v)} (${CA.icTxt(r.e, CA.pct)})`
+      : c.tipo === "or" ? `OR ${CA.fmt(r.or.v)} (${CA.icTxt(r.or)})` : CA.textoCEI(r, c.entrada.unidad);
+    return `<li>${esc(t)}</li>`;
+  }
+  // Lo que se pinta en una pregunta que usa una calculadora
+  function calcEnPregunta(l, pl, q) {
+    const tipo = CA.CALC_DE_PREGUNTA[q.calc];
+    if (!tipo) return `<p class="calc-prox">🧮 La calculadora de metaanálisis llegará en una próxima versión. Mientras, escribe aquí lo que dice el artículo.</p>`;
+    const qs = L.preguntasDe(pl), primera = qs.find(x => CA.CALC_DE_PREGUNTA[x.calc] === tipo), cs = l.calculos.filter(c => c.tipo === tipo);
+    if (q.calc === "fagan") {
+      const c = cs.map(x => ({ x, r: L.resultadoCalculo(x) })).find(y => y.r.ok);
+      if (!c) return `<p class="calc-prox">🧮 Calcula antes los cocientes de probabilidad en la pregunta ${L.numeroDe(pl, primera.id)}: aquí verás el nomograma de Fagan con tu umbral de acción.</p>`;
+      const u = CA.prob(c.x.entrada.umbral);
+      return `<div class="calc-card"><span class="calc-tag">🧮 ¿Cambia lo que haces?</span>
+        <p class="calc-ayuda">Probabilidad antes de la prueba: ${CA.pct(c.r.pre)}. Si da positivo, ${CA.pct(c.r.post.pos.v)}; si da negativo, ${CA.pct(c.r.post.neg.v)}. ${u > 0 && u < 1 ? esc(umbralTxt(c.r, u)) : `Escribe tu umbral de acción en la calculadora de la pregunta ${L.numeroDe(pl, primera.id)}.`}</p>
+        ${faganSvg(c.r.pre, [{ lr: c.r.lrp.v, et: "Positivo", c: "pos" }, { lr: c.r.lrn.v, et: "Negativo", c: "neg" }], u)}</div>`;
+    }
+    if (primera.id !== q.id) {
+      const res = cs.map(c => calcResumen(l, c)).join("");
+      return res ? `<div class="calc-resumen"><span class="calc-tag">🧮 Lo que da la calculadora (pregunta ${L.numeroDe(pl, primera.id)})</span><ul>${res}</ul></div>` : `<p class="calc-prox">🧮 Usa la calculadora de la pregunta ${L.numeroDe(pl, primera.id)}: aquí verás sus intervalos de confianza.</p>`;
+    }
+    return `${cs.map(c => calcCard(l, c, q)).join("")}
+      <button type="button" class="btn ${cs.length ? "btn--ghost" : "btn--primary"}" data-act="calc-nuevo" data-tipo="${tipo}">${cs.length ? (tipo === "tratamiento" ? "+ Calcular otro desenlace" : "+ Otra calculadora") : "🧮 Abrir la calculadora"}</button>
+      ${tipo === "tratamiento" && l.desenlaces.some(d => lleno(d.nombre)) ? `<datalist id="dl-des">${l.desenlaces.filter(d => lleno(d.nombre)).map(d => `<option value="${esc(d.nombre)}">`).join("")}</datalist>` : ""}`;
+  }
+
+  // ---------- Calculadoras sueltas ----------
+  const sueltas = {};
+  // Lo que viaja en el enlace: solo lo escrito
+  const estadoSuelta = s => { const d = {}; Object.keys(s.entrada).forEach(k => { if (lleno(s.entrada[k])) d[k] = s.entrada[k]; }); if (s.niveles.some(n => lleno(n.a) || lleno(n.b) || lleno(n.nombre))) d.niveles = s.niveles; if (lleno(s.nombre)) d.nombre = s.nombre; return d; };
+  const suelta = tipo => sueltas[tipo] || (sueltas[tipo] = { entrada: L.nuevoCalculo("x", tipo).entrada, niveles: L.nuevoCalculo("x", tipo).niveles, nombre: "" });
+  function renderCalc(tipo, d) {
+    if (!CA.CALCS[tipo]) {
+      view.innerHTML = `
+        <h1 class="page-title">Calcular</h1>
+        <p class="page-lead">Las calculadoras de los resultados, sueltas. Dentro de una lectura aparecen en la pregunta donde se necesitan.</p>
+        <div class="cuadro-lista cuadro-lista--2">${Object.entries(CA.CALCS).map(([k, c]) => `<a class="item-card item-main" href="#/calc/${k}"><b class="item-t">🧮 ${esc(c.titulo)}</b><span class="item-s">${esc(c.que)}</span></a>`).join("")}
+          <div class="item-card item-main item-card--prox"><b class="item-t">Metaanálisis y supervivencia</b><span class="item-s">Diagrama de bosque, heterogeneidad (I²) y hazard ratio. Próximamente.</span></div></div>
+        ${trampa("Una calculadora no arregla un mal estudio: primero, <b>¿es válido?</b> Los números de un estudio con sesgos son números sesgados.")}`;
+      return;
+    }
+    const s = suelta(tipo);
+    if (d) { try { const o = JSON.parse(d); Object.keys(s.entrada).forEach(k => { if (typeof o[k] === "string" || typeof o[k] === "number") s.entrada[k] = String(o[k]).slice(0, 40); }); if (Array.isArray(o.niveles)) s.niveles = o.niveles.slice(0, 5).map(n => ({ nombre: String(n.nombre || "").slice(0, 100), a: String(n.a || "").slice(0, 12), b: String(n.b || "").slice(0, 12) })); if (typeof o.nombre === "string") s.nombre = o.nombre.slice(0, 300); } catch (e) { /* enlace dañado */ } }
+    const info = CA.CALCS[tipo], bind = `data-cs="${tipo}"`;
+    const lecturas = datos.lecturas.slice().sort((a, b) => String(b.modificado).localeCompare(String(a.modificado)));
+    view.innerHTML = `
+      ${volver("#/calc", "Calcular")}
+      <h1 class="page-title">${esc(info.titulo)}</h1>
+      <p class="page-lead">${esc(info.que)}</p>
+      ${facil(FACIL_CALC[tipo])}
+      <div class="calc-card">
+        ${tipo === "tratamiento" ? `<input class="txt-in" ${bind} data-f="nombre" value="${esc(s.nombre)}" placeholder="Desenlace (por ejemplo, ingreso en UCI)" aria-label="Desenlace" autocomplete="off" />` : ""}
+        ${calcForm(tipo, s.entrada, s.niveles, bind)}
+        <div data-zcalc="cs-${tipo}">${calcRes(tipo, s.entrada, s.niveles, s.nombre)}</div>
+      </div>
+      <div class="card">
+        <h2 class="sub-h">Guardar o compartir</h2>
+        ${lecturas.length ? `<div class="guardar-en"><select class="txt-in" id="cs-lectura" aria-label="Lectura">${lecturas.map(l => `<option value="${l.id}">${esc(L.corto(nombreLectura(l) || "Lectura sin título", 70))}</option>`).join("")}</select><button type="button" class="btn btn--primary" data-act="cs-guardar" data-tipo="${tipo}">Guardar en esta lectura</button></div>` : `<p class="field-sub">Cuando tengas una lectura, podrás guardar aquí el cálculo con ella.</p>`}
+        <div class="toolbar"><button type="button" class="btn" data-act="cs-enlace" data-tipo="${tipo}">🔗 Copiar el enlace con los datos</button><button type="button" class="btn btn--ghost" data-act="cs-limpiar" data-tipo="${tipo}">Vaciar</button></div>
+      </div>`;
+  }
+  const FACIL_CALC = {
+    tratamiento: `<p>Compara cuántos tienen el evento en cada grupo:</p><ul><li><b>Riesgo relativo (RR)</b>: el riesgo con la intervención dividido entre el riesgo sin ella. RR 0,5 = la mitad de riesgo.</li><li><b>Reducción relativa (RRR)</b>: 1 − RR. Suena muy bien («reduce un 50 %») aunque el riesgo de partida sea pequeño.</li><li><b>Reducción absoluta (RAR)</b>: la resta de los dos riesgos. Es lo que de verdad ganan tus pacientes.</li><li><b>NNT</b>: 1 / RAR. A cuántos hay que tratar para evitar un evento. Cuanto más bajo, mejor.</li></ul><p>Mira siempre el <b>intervalo de confianza</b>: si el del RR incluye el 1, el resultado es compatible con que no haya efecto.</p>`,
+    or: `<p>En un estudio de casos y controles no se pueden calcular riesgos (los investigadores eligen cuántos casos y controles hay), así que se compara la <b>odds</b> de exposición: la <b>odds ratio (OR)</b>.</p><p>OR mayor que 1: la exposición se asocia al desenlace; menor que 1: protege. Si el intervalo incluye el 1, la asociación podría no existir.</p>`,
+    diagnostico: `<p>Una prueba no dice «sí» o «no»: <b>cambia la probabilidad</b> de que tu paciente tenga la enfermedad.</p><ul><li><b>Sensibilidad</b>: de los enfermos, cuántos dan positivo. <b>Especificidad</b>: de los sanos, cuántos dan negativo.</li><li>Los <b>cocientes de probabilidad (LR)</b> dicen cuánto mueve la probabilidad un resultado. LR+ mayor de 10 o LR− menor de 0,1: cambio grande.</li><li>Los <b>valores predictivos</b> dependen de la prevalencia: en tu medio pueden ser muy distintos a los del estudio.</li></ul><p>Con el <b>nomograma de Fagan</b> unes la probabilidad antes de la prueba con el LR y lees la de después.</p>`,
+    niveles: `<p>Muchas pruebas no son solo positivas o negativas (una escala de 0 a 10, un valor de laboratorio por tramos). Partirlas en dos pierde información: es mejor un <b>cociente de probabilidad para cada nivel</b>.</p>`,
+    bayes: `<p>Si el artículo solo da la sensibilidad y la especificidad, puedes calcular los cocientes de probabilidad (LR+ = S / (1 − E); LR− = (1 − S) / E) y, con la probabilidad que tiene tu paciente antes de la prueba, la de después.</p>`,
+    cei: `<p>La <b>razón de coste-efectividad incremental (RCEI)</b> es lo que cuesta de más cada unidad de efecto que se gana con la alternativa nueva: diferencia de costes ÷ diferencia de efectos.</p><p>Si la nueva cuesta menos y consigue más, <b>domina</b>: no hace falta calcular nada. Si cuesta más y consigue más, hay que decidir si la RCEI merece la pena (por ejemplo, frente a un umbral por AVAC).</p>`
+  };
 
   // ---------- Paso 7 · Veredicto ----------
   function paso7(l) {
@@ -405,8 +646,9 @@
     $$("[data-zona]").forEach(el => { const f = Z[el.dataset.zona]; if (f) el.innerHTML = f(); });
     $$("[data-pq]").forEach(el => {
       const q = L.preguntasDe(L.plantilla(l.plantilla)).find(x => x.id === el.dataset.pq); if (!q || q.resp !== "abierta") return;
-      el.classList.toggle("hecha", lleno(L.resp(l, q.id).nota));
+      el.classList.toggle("hecha", L.contestada(l, q));
     });
+    $$("[data-zcalc]").forEach(el => { const c = l.calculos.find(x => x.id === el.dataset.zcalc); if (c) el.innerHTML = calcRes(c.tipo, c.entrada, c.niveles, c.nombre); });
   }
   function repintar() { const y = window.scrollY; renderLectura(actual, pasoActual); window.scrollTo(0, y); }
 
@@ -526,7 +768,7 @@
   }
 
   // ---------- Enrutado ----------
-  const NAV = [["", "Inicio"], ["lecturas", "Mis lecturas"], ["tipo", "¿Qué estudio es?"], ["plantillas", "Plantillas"]];
+  const NAV = [["", "Inicio"], ["lecturas", "Mis lecturas"], ["tipo", "¿Qué estudio es?"], ["calc", "Calcular"], ["plantillas", "Plantillas"]];
   function buildNav() { $("#calc-nav").innerHTML = NAV.map(([r, t]) => `<a href="#/${r}" data-r="${r}">${t}</a>`).join(""); }
   function noEncontrado(que, href, txt) { view.innerHTML = `<div class="error-box">No se encuentra ${que} en este dispositivo.</div><p><a href="${href}">${txt}</a></p>`; }
   const rutaActual = () => location.hash.split("?")[0];
@@ -559,6 +801,7 @@
       if (para !== arbolPara) { arbolPara = para; arbolResp = []; }
       renderArbol();
     } else if (partes[0] === "plantillas") renderPlantillas(partes[1]);
+    else if (partes[0] === "calc") renderCalc(partes[1], q.get("d"));
     else { renderHome(); navR = ""; }
     $$("#calc-nav a").forEach(a => a.classList.toggle("active", a.dataset.r === navR));
     const act = $("#calc-nav a.active"); if (act && act.scrollIntoView) act.scrollIntoView({ block: "nearest", inline: "center" });
@@ -581,9 +824,21 @@
     const t = e.target, l = actual;
     if (t.matches("textarea.txt-in")) autoAlto(t);
     if (t.id === "buscar-lec") { filtroLista = t.value; $("[data-zona='lista']").innerHTML = listaInner(); return; }
+    if (t.dataset.cs) {
+      const tipo = t.dataset.cs, s = suelta(tipo);
+      if (t.dataset.nv) s.niveles[Number(t.dataset.nv)][f] = t.value; else if (f === "nombre") s.nombre = t.value; else s.entrada[f] = t.value;
+      const z = $(`[data-zcalc="cs-${tipo}"]`); if (z) z.innerHTML = calcRes(tipo, s.entrada, s.niveles, s.nombre);
+      history.replaceState(null, "", `#/calc/${tipo}?d=${encodeURIComponent(JSON.stringify(estadoSuelta(s)))}`);
+      return;
+    }
     if (!l) return;
     const f = t.dataset.f, esSel = t.tagName === "SELECT";
     if (t.dataset.q) { L.ponerRespuesta(l, t.dataset.q, "nota", t.value); tocado(l); refrescar(); return; }
+    if (t.dataset.calc) {
+      const c = buscaEn(l.calculos, t.dataset.calc); if (!c) return;
+      if (t.dataset.nv) c.niveles[Number(t.dataset.nv)][f] = t.value; else if (f === "nombre") c.nombre = t.value; else c.entrada[f] = t.value;
+      tocado(l); refrescar(); return;
+    }
     if (t.dataset.des) { const d = buscaEn(l.desenlaces, t.dataset.des); if (!d) return; d[f] = t.value; tocado(l); refrescar(); return; }
     if (t.dataset.con) { const c = buscaEn(l.confusores, t.dataset.con); if (!c) return; c[f] = t.value; tocado(l); refrescar(); return; }
     if (t.dataset.acc) { const a = buscaEn(l.veredicto.acciones, t.dataset.acc); if (!a) return; a[f] = t.value; tocado(l); refrescar(); return; }
@@ -615,6 +870,25 @@
         const x = buscaLectura(arbolPara) || borradores.get(arbolPara); if (!x) return;
         L.cambiarPlantilla(x, b.dataset.pl); tocado(x); arbolResp = []; location.hash = `#/lectura/${x.id}/4`; return;
       }
+      case "cs-guardar": {
+        const x = buscaLectura(($("#cs-lectura") || {}).value), s = suelta(b.dataset.tipo); if (!x) return;
+        const c = Object.assign(L.nuevoCalculo(genId(), b.dataset.tipo), clon({ entrada: s.entrada, niveles: s.niveles, nombre: s.nombre }));
+        x.calculos.push(c); tocado(x);
+        toast(`Guardado en «${L.corto(nombreLectura(x) || "tu lectura", 50)}».`, 3500); return;
+      }
+      case "cs-enlace": {
+        const url = location.href;
+        (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(() => toast("Enlace copiado: lleva los datos de la calculadora.", 3500)).catch(() => window.prompt("Copia este enlace:", url));
+        return;
+      }
+      case "cs-limpiar": { delete sueltas[b.dataset.tipo]; history.replaceState(null, "", `#/calc/${b.dataset.tipo}`); renderCalc(b.dataset.tipo); return; }
+      case "nivel-nuevo": case "nivel-del": if (b.dataset.cs) {
+        const s = suelta(b.dataset.cs);
+        if (act === "nivel-nuevo" && s.niveles.length < 5) s.niveles.push(L.nuevoNivel());
+        if (act === "nivel-del" && s.niveles.length > 2) s.niveles.splice(Number(b.dataset.nv), 1);
+        history.replaceState(null, "", `#/calc/${b.dataset.cs}?d=${encodeURIComponent(JSON.stringify(estadoSuelta(s)))}`);
+        { const y = window.scrollY; renderCalc(b.dataset.cs); window.scrollTo(0, y); } return;
+      } break;
       case "arbol-nueva": { const x = nuevaLectura(b.dataset.pl); arbolResp = []; location.hash = `#/lectura/${x.id}/1`; toast(`Lectura nueva con la plantilla de ${L.plantilla(b.dataset.pl).nombre.toLowerCase()}. Empieza por tu pregunta.`, 4000); return; }
     }
     if (!l) return;
@@ -646,6 +920,25 @@
       case "nueva-acc": l.veredicto.acciones.push(L.nuevaAccion(genId())); tocado(l); repintar(); { const ins = $$("[data-acc][data-f='que']"); if (ins.length) ins[ins.length - 1].focus(); } return;
       case "del-acc": l.veredicto.acciones = l.veredicto.acciones.filter(x => x.id !== b.dataset.id); tocado(l); repintar(); return;
       case "normalizar": normalizarCita(l); return;
+      case "calc-nuevo": l.calculos.push(L.nuevoCalculo(genId(), b.dataset.tipo)); tocado(l); repintar(); { const c = $$(".calc-card[data-calcid]").pop(); const i = c && c.querySelector(".calc-in, input"); if (i) i.focus(); } return;
+      case "calc-del": {
+        const c = buscaEn(l.calculos, b.dataset.id); if (!c) return;
+        const quitar = () => { l.calculos = l.calculos.filter(x => x.id !== c.id); tocado(l); repintar(); };
+        if (Object.values(c.entrada).some(lleno) || c.niveles.some(n => lleno(n.a) || lleno(n.b))) confirmar("<p>Se quitará esta calculadora con sus datos.</p>", "Quitar", quitar); else quitar();
+        return;
+      }
+      case "calc-usar": {
+        const c = buscaEn(l.calculos, b.dataset.id); if (!c) return;
+        const txt = L.textoCalculo(c); if (!txt) { toast("Completa antes los datos de la calculadora.", 3000); return; }
+        const prev = L.resp(l, b.dataset.q).nota;
+        L.ponerRespuesta(l, b.dataset.q, "nota", lleno(prev) ? prev.trim() + "\n" + txt : txt); tocado(l); repintar(); toast("Resultado copiado en la respuesta.", 2500); return;
+      }
+      case "nivel-nuevo": case "nivel-del": {
+        const c = buscaEn(l.calculos, b.dataset.calc); if (!c) return;
+        if (act === "nivel-nuevo" && c.niveles.length < 5) c.niveles.push(L.nuevoNivel());
+        if (act === "nivel-del" && c.niveles.length > 2) c.niveles.splice(Number(b.dataset.nv), 1);
+        tocado(l); repintar(); return;
+      }
     }
   });
   // «Explicado fácil» recuerda si se dejó abierto

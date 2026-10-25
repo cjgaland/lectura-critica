@@ -156,6 +156,31 @@ eq("Siguiente paso: falta la pregunta 2", L.siguientePaso({ lecturas: [l2, l] })
 L.ponerRespuesta(l, "ec-2", "valor", "si");
 eq("Siguiente paso: la más reciente", L.siguientePaso({ lecturas: [l2, l] }).href, "#/lectura/l1/7");
 
+// ---------- Calculadoras guardadas con la lectura ----------
+{
+  const lc = L.nuevaLectura("lc", "2026-10-26");
+  L.cambiarPlantilla(lc, "ensayo");
+  const q7 = L.preguntasDe(L.plantilla("ensayo")).find(q => q.id === "ec-7");
+  t("Sin calculadora la abierta no está contestada", !L.contestada(lc, q7));
+  const c = L.nuevoCalculo("c1", "tratamiento");
+  Object.assign(c.entrada, { nc: "400", ne: "400", ec: "80", ee: "40" }); c.nombre = "empeoramiento";
+  lc.calculos.push(c);
+  t("Con una calculadora con resultado, contestada", L.contestada(lc, q7) && L.contestada(lc, L.preguntasDe(L.plantilla("ensayo")).find(q => q.id === "ec-8")));
+  const sr = L.semaforoPropuesto(lc, "resultados");
+  eq("Semáforo de resultados desde la calculadora", sr.color, "verde");
+  t("Motivo de la calculadora", /Según la calculadora/.test(sr.motivo));
+  t("Texto llano de la calculadora", /de cada 100/.test(L.textoCalculo(c)) && /«empeoramiento»/.test(L.textoCalculo(c)));
+  c.entrada.ee = "78";
+  eq("Calculadora sin efecto con 800 pacientes: rojo", L.semaforoPropuesto(lc, "resultados").color, "rojo");
+  c.entrada.ee = "texto";
+  t("Calculadora con datos malos: no cuenta", !L.contestada(lc, q7) && L.semaforoPropuesto(lc, "resultados").color === "");
+  const d = L.nuevoCalculo("c2", "diagnostico");
+  t("La de diagnóstico no sirve al ensayo", L.calculosDe(lc, q7).length === 1 && d.niveles.length === 0);
+  eq("Niveles empieza con tres filas", L.nuevoCalculo("c3", "niveles").niveles.length, 3);
+  const s = L.sanearLectura({ id: "x", calculos: [{ id: "k1", tipo: "inventada" }, { id: "k2", tipo: "diagnostico", entrada: { a: "90", z: "no" }, niveles: [{ a: 1 }, 2] }] }, gid, "");
+  eq("Saneado de calculadoras", [s.calculos.length, s.calculos[0].tipo, s.calculos[1].entrada.a, "z" in s.calculos[1].entrada, s.calculos[1].niveles.length], [2, "tratamiento", "90", false, 1]);
+}
+
 // ---------- Saneado y fusión ----------
 const sucio = { lecturas: [
   { id: "x1", titulo: 42, plantilla: "inventada", respuestas: { "ec-1": { valor: "quizá", nota: "n" }, "malo": { valor: "si" }, "ec-2": { valor: "si" } }, veredicto: { decision: "ya", semaforo: { validez: "morado" }, acciones: [{ que: "x" }, "basura"] }, desenlaces: [{ nombre: "Muerte", importancia: "12" }] },

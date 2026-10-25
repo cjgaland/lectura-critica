@@ -4,12 +4,15 @@
 //  plantilla y respuestas, desenlaces, confusores, veredicto), preguntas de
 //  eliminación y aviso de parada, semáforo por bloque y decisión propuesta
 //  (aplicar · esperar · descartar), árbol «¿Qué tipo de estudio tengo?»,
-//  avisos didácticos por paso, progreso y «tu siguiente paso», saneado y fusión.
+//  avisos didácticos por paso, progreso y «tu siguiente paso», calculadoras
+//  guardadas con la lectura (las fórmulas viven en calculos.js), saneado y fusión.
 //  window.Logica en navegador y module.exports en Node (tests).
 // ============================================================
 (function (raiz) {
   "use strict";
-  const PL = typeof module !== "undefined" && module.exports ? require("./plantillas.js") : raiz.Plantillas;
+  const enNode = typeof module !== "undefined" && module.exports;
+  const PL = enNode ? require("./plantillas.js") : raiz.Plantillas;
+  const CA = enNode ? require("./calculos.js") : raiz.Calculos;
 
   const VERSION_DATOS = 1;
   const URL_AUD = "https://cjgaland.github.io/auditorias/";
@@ -37,7 +40,7 @@
     { n: 3, k: "tipo", titulo: "Tipo de estudio", corto: "Tipo", que: "Elige la plantilla que le corresponde, o averígualo con unas preguntas sencillas.", entrega: 1 },
     { n: 4, k: "validez", titulo: "¿Es válido?", corto: "Válido", que: "Primero las preguntas de eliminación; después, las que valoran el riesgo de sesgo.", entrega: 1 },
     { n: 5, k: "resultados", titulo: "¿Qué dice?", corto: "Efecto", que: "El efecto en cada desenlace y su precisión (intervalos de confianza).", entrega: 1 },
-    { n: 6, k: "aplicabilidad", titulo: "¿Me sirve?", corto: "Me sirve", que: "¿Se parecen tus pacientes? ¿Están todos los resultados importantes? ¿Compensa?", entrega: 1 },
+    { n: 6, k: "aplicabilidad", titulo: "¿Me sirve?", corto: "Sirve", que: "¿Se parecen tus pacientes? ¿Están todos los resultados importantes? ¿Compensa?", entrega: 1 },
     { n: 7, k: "veredicto", titulo: "Veredicto", corto: "Decide", que: "Semáforo por bloque y tu decisión: aplicar, esperar o descartar.", entrega: 1 }
   ];
   const PASO_BLOQUE = { 4: "validez", 5: "resultados", 6: "aplicabilidad" };
@@ -66,6 +69,15 @@
   const nuevoDesenlace = id => ({ id, nombre: "", importancia: "", sentido: "beneficio" });
   const nuevoConfusor = id => ({ id, texto: "", tenido: "" });
   const nuevaAccion = id => ({ id, que: "", quien: "", cuando: "" });
+  // Una calculadora guardada con la lectura: solo lo escrito; los resultados se calculan siempre (calculos.js)
+  const CAMPOS_CALC = ["nc", "pc", "ec", "ne", "pe", "ee", "peer", "f", "a", "b", "c", "d", "pre", "umbral", "s", "e", "cn", "ch", "en", "eh", "unidad"];
+  const TIPOS_CALC = Object.keys(CA.CALCS);
+  const nuevaEntrada = () => Object.fromEntries(CAMPOS_CALC.map(k => [k, ""]));
+  const nuevoNivel = () => ({ nombre: "", a: "", b: "" });
+  const nuevoCalculo = (id, tipo) => ({ id, tipo, nombre: "", entrada: nuevaEntrada(), niveles: tipo === "niveles" ? [nuevoNivel(), nuevoNivel(), nuevoNivel()] : [], nota: "" });
+  const resultadoCalculo = c => CA.calcular(c.tipo, Object.assign({}, c.entrada, { niveles: c.niveles }));
+  // Las calculadoras de la lectura que sirven a una pregunta (por su «calc»)
+  const calculosDe = (l, q) => { const t = q && CA.CALC_DE_PREGUNTA[q.calc]; return t ? l.calculos.filter(c => c.tipo === t) : []; };
   const nuevoVeredicto = () => ({ semaforo: { validez: "", resultados: "", aplicabilidad: "" }, motivoSemaforo: { validez: "", resultados: "", aplicabilidad: "" }, decision: "", motivo: "", acciones: [], mensaje: "" });
   function nuevaLectura(id, fecha) {
     return {
@@ -75,7 +87,7 @@
       filtro: { responde: "", tipoResumen: "", reciente: "", nota: "" },
       plantilla: "", plantillaVersion: 0,
       respuestas: {}, aparte: {},
-      desenlaces: [], confusores: [],
+      desenlaces: [], confusores: [], calculos: [],
       veredicto: nuevoVeredicto(),
       notas: "", fecha: String(fecha || "").slice(0, 10), creado: fecha || "", modificado: fecha || ""
     };
@@ -84,8 +96,8 @@
   // ---------- Respuestas ----------
   const resp = (l, id) => l.respuestas[id] || nuevaRespuesta();
   const valor = (l, id) => resp(l, id).valor;
-  // Una pregunta está contestada si tiene valor; las abiertas, si tienen texto
-  const contestada = (l, q) => q.resp === "abierta" ? lleno(resp(l, q.id).nota) : lleno(resp(l, q.id).valor);
+  // Una pregunta está contestada si tiene valor; las abiertas, si tienen texto o una calculadora con resultado
+  const contestada = (l, q) => q.resp === "abierta" ? lleno(resp(l, q.id).nota) || calculosDe(l, q).some(c => resultadoCalculo(c).ok) : lleno(resp(l, q.id).valor);
   function ponerRespuesta(l, id, campo, v) {
     if (!l.respuestas[id]) l.respuestas[id] = nuevaRespuesta();
     l.respuestas[id][campo] = v;
@@ -136,7 +148,12 @@
     if (bloque === "resultados") {
       const par = no.filter(q => q.parada);
       if (par.length) return { color: "rojo", motivo: `No te crees los resultados (pregunta ${nums(par)}).`, completo };
-      if (!snd.length) return { color: "", motivo: completo ? "Decide tú: ¿el efecto es importante y preciso?" : "Escribe primero los resultados.", completo };
+      if (!snd.length) {
+        // Sin preguntas de Sí/No: propone la primera calculadora con resultado de este bloque
+        const c = qs.reduce((a, q) => a.concat(calculosDe(l, q)), []).map(x => CA.semaforoCalculo(x.tipo, resultadoCalculo(x))).find(Boolean);
+        if (c) return { color: c.color, motivo: "Según la calculadora: " + c.motivo, completo };
+        return { color: "", motivo: completo ? "Decide tú: ¿el efecto es importante y preciso?" : "Escribe primero los resultados o usa la calculadora.", completo };
+      }
       if (!completo) return { color: "", motivo: "Faltan preguntas por contestar.", completo };
       if (no.length) return { color: "ambar", motivo: `«No» en ${no.length === 1 ? "la pregunta" : "las preguntas"} ${nums(no)}.`, completo };
       if (nose.length) return { color: "ambar", motivo: `No se puede saber ${nose.length === 1 ? "la pregunta" : "las preguntas"} ${nums(nose)}.`, completo };
@@ -203,9 +220,16 @@
     const d = l.veredicto.decision || decisionPropuesta(l).decision, pl = plantilla(l.plantilla);
     if (!d) return "";
     const tipo = pl ? pl.nombre.toLowerCase() : "estudio";
-    const res = preguntasDe(pl, "resultados").map(q => resp(l, q.id).nota).filter(lleno)[0];
+    const res = preguntasDe(pl, "resultados").map(q => resp(l, q.id).nota).filter(lleno)[0] || textoCalculo(l.calculos[0]);
     const base = { aplicar: `Este ${tipo} es fiable y aplicable a nuestro medio`, esperar: `Este ${tipo} es prometedor, pero con dudas importantes`, descartar: `Este ${tipo} no nos sirve para decidir` }[d];
     return base + (res && d !== "descartar" ? `: ${corto(res.replace(/\s+/g, " "), 160)}` : ".");
+  }
+
+  // Frase en lenguaje llano de una calculadora guardada
+  function textoCalculo(c) {
+    if (!c) return "";
+    const r = resultadoCalculo(c);
+    return c.tipo === "tratamiento" ? CA.textoTratamiento(r, c.nombre) : c.tipo === "diagnostico" ? CA.textoDiagnostico(r) : c.tipo === "or" ? CA.textoOR(r) : c.tipo === "cei" ? CA.textoCEI(r, c.entrada.unidad) : "";
   }
 
   // ---------- Avisos didácticos por paso ----------
@@ -295,17 +319,21 @@
     desenlace: { id: "id", nombre: [300], importancia: { en: ["", "1", "2", "3", "4", "5", "6", "7", "8", "9"] }, sentido: { en: ["beneficio", "dano"] } },
     confusor: { id: "id", texto: [300], tenido: SNS },
     accion: { id: "id", que: [800], quien: [200], cuando: [100] },
+    entradaCalc: Object.fromEntries(CAMPOS_CALC.map(k => [k, [k === "unidad" ? 80 : 30]])),
+    nivel: { nombre: [100], a: [12], b: [12] },
+    calculo: { id: "id", tipo: { en: TIPOS_CALC }, nombre: [300], entrada: { obj: "entradaCalc" }, niveles: { de: "nivel", max: 5 }, nota: [1500] },
     semaforos: { validez: COLOR_EN, resultados: COLOR_EN, aplicabilidad: COLOR_EN },
     motivos: { validez: [600], resultados: [600], aplicabilidad: [600] },
     veredicto: { semaforo: { obj: "semaforos" }, motivoSemaforo: { obj: "motivos" }, decision: { en: ["", "aplicar", "esperar", "descartar"] }, motivo: [2000], acciones: { de: "accion", max: 20 }, mensaje: [800] },
     lectura: { id: "id", titulo: [400], referencia: { obj: "referencia" }, pico: { obj: "pico" }, pregunta: [1200], filtro: { obj: "filtro" },
       plantilla: { en: ["", ...PL.PLANTILLAS.map(p => p.id)] }, plantillaVersion: "ent",
       respuestas: { mapa: "respuesta", max: 60 }, aparte: { mapa: "respuesta", max: 200 },
-      desenlaces: { de: "desenlace", max: 30 }, confusores: { de: "confusor", max: 30 }, veredicto: { obj: "veredicto" },
+      desenlaces: { de: "desenlace", max: 30 }, confusores: { de: "confusor", max: 30 }, calculos: { de: "calculo", max: 20 }, veredicto: { obj: "veredicto" },
       notas: [4000], fecha: [20], creado: [40], modificado: [40] }
   };
   const FABRICA = {
     referencia: () => nuevaLectura("x").referencia, pico: () => nuevaLectura("x").pico, filtro: () => nuevaLectura("x").filtro,
+    entradaCalc: nuevaEntrada, nivel: nuevoNivel, calculo: id => nuevoCalculo(id, "tratamiento"),
     respuesta: nuevaRespuesta, desenlace: nuevoDesenlace, confusor: nuevoConfusor, accion: nuevaAccion,
     semaforos: () => nuevoVeredicto().semaforo, motivos: () => nuevoVeredicto().motivoSemaforo, veredicto: nuevoVeredicto,
     lectura: id => nuevaLectura(id, "")
@@ -355,6 +383,7 @@
     lleno, sinTildes, corto, plural, fmtFecha,
     PASOS, PASO_BLOQUE, BLOQUE_PASO, RESPUESTAS, DECISIONES, COLORES, IMPORTANCIA, CLAVE_APLICA,
     plantilla, preguntasDe, numeroDe, PREFIJOS,
+    CAMPOS_CALC, TIPOS_CALC, nuevoCalculo, nuevoNivel, resultadoCalculo, calculosDe, textoCalculo,
     nuevaLectura, nuevaRespuesta, nuevoDesenlace, nuevoConfusor, nuevaAccion, nuevoVeredicto,
     resp, valor, contestada, ponerRespuesta, cambiarPlantilla,
     eliminacion, paradas, cerradaPronto, semaforoPropuesto, semaforo, decisionPropuesta,

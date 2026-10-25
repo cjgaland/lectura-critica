@@ -1248,3 +1248,82 @@ a.entrada:hover { border-color: var(--cyan); }
 /* Plantillas */
 .pl-lista { margin: 0; padding-left: 26px; display: grid; gap: 10px; }
 .pl-lista > li > ul { margin: 4px 0 0; padding-left: 18px; font-size: 14px; color: var(--text-2); }
+
+/* ---------- Calculadoras ---------- */
+.calc-card { margin: 10px 0; padding: 12px; border-radius: var(--radius-lg); border: 1.5px solid var(--cyan-glow); background: var(--bg); }
+.calc-card > input.txt-in { width: 100%; margin-bottom: 10px; }
+.calc-cab { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.calc-tag { display: inline-block; font-size: 12px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; color: var(--cyan); }
+.calc-h { margin: 14px 0 6px; font-size: 15px; }
+.calc-ayuda { margin: 6px 0; font-size: 13px; color: var(--text-2); }
+.calc-vacia { margin: 10px 0 0; font-size: 13.5px; color: var(--text-3); font-style: italic; }
+.calc-enlace { margin: 8px 0 0; font-size: 13.5px; }
+.calc-mas { margin-top: 10px; }
+.calc-mas summary { cursor: pointer; font-size: 13.5px; font-weight: 700; color: var(--cyan); }
+.calc-resumen { margin: 8px 0; padding: 10px 12px; border-radius: var(--radius); background: var(--cyan-dim); border: 1px solid var(--cyan-glow); }
+.calc-resumen ul { margin: 4px 0 0; padding-left: 18px; font-size: 14px; }
+.nota-lbl { display: block; margin: 10px 0 4px; font-size: 13.5px; font-weight: 700; color: var(--text-2); }
+.tabla-calc { display: grid; gap: 6px 8px; align-items: center; margin: 4px 0; }
+.tabla-calc--3 { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr); }
+.tabla-calc--2 { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); margin-top: 8px; }
+.tabla-calc > b { font-size: 13px; text-align: center; line-height: 1.2; }
+.tabla-calc small { display: block; font-weight: 500; font-size: 11.5px; color: var(--text-3); }
+.tabla-calc > span { font-size: 13.5px; font-weight: 600; color: var(--text-2); }
+.tabla-calc > span small { display: inline; }
+input.calc-in { width: 100%; text-align: center; font: 700 17px var(--font); padding: 9px 6px; }
+input.calc-in--txt { text-align: left; font: 500 15px var(--font); }
+.tabla-niv { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: center; margin-bottom: 8px; }
+.tabla-niv > b { font-size: 12.5px; line-height: 1.2; }
+.res-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+@media (min-width: 720px) { .res-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.res-grid--2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+.res-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+.res { display: flex; flex-direction: column; gap: 1px; padding: 9px 10px; border-radius: var(--radius); background: var(--bg-2); border: 1px solid var(--border); min-width: 0; }
+.res--main { border-color: var(--cyan); background: var(--cyan-dim); }
+.res-et { font-size: 12px; font-weight: 700; color: var(--text-2); line-height: 1.25; }
+.res-v { font-size: 21px; line-height: 1.2; color: var(--text-1); }
+.res--main .res-v { color: var(--cyan); }
+.res-ic, .res-sub { font-size: 12px; color: var(--text-3); line-height: 1.3; }
+.llano { margin: 12px 0 4px; padding: 10px 12px; border-radius: var(--radius); background: var(--bg-3); border-left: 4px solid var(--cyan); font-size: 14.5px; }
+.tabla-res { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13.5px; }
+.tabla-res th, .tabla-res td { padding: 6px 6px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.tabla-res th { font-size: 12px; color: var(--text-3); }
+.tabla-res small { color: var(--text-3); }
+.fila-base td { font-weight: 700; }
+.guardar-en { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+@media (min-width: 620px) { .guardar-en { grid-template-columns: minmax(0, 1fr) auto; } }
+.cuadro-lista--2 { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 720px) { .cuadro-lista--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.item-card--prox { opacity: .65; border-style: dashed; }
+
+/* Pictograma de 100 personas */
+.pictos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 12px 0 4px; }
+.picto { margin: 0; text-align: center; }
+.picto svg { width: 100%; max-width: 180px; height: auto; }
+.picto figcaption { font-size: 13px; color: var(--text-2); }
+.pic-si { fill: var(--cyan); }
+.pic-no { fill: var(--border); }
+
+/* Nomograma de Fagan */
+.fagan { margin: 12px auto 0; max-width: 440px; }
+.fagan svg { width: 100%; height: auto; display: block; }
+.fagan figcaption { font-size: 12.5px; color: var(--text-3); text-align: center; }
+.fg-eje { stroke: var(--text-2); stroke-width: 1.5; }
+.fg-tick { stroke: var(--text-3); stroke-width: 1; }
+.fg-txt { fill: var(--text-3); font: 500 9px var(--font); }
+.fg-tit { fill: var(--text-2); font: 800 11px var(--font); }
+.fg-lin { stroke-width: 2.2; }
+.fg-lin--pos, .fg-pt--pos { stroke: var(--red); fill: var(--red); }
+.fg-lin--neg, .fg-pt--neg { stroke: var(--green); fill: var(--green); }
+.fg-et { font: 800 10px var(--font); }
+.fg-et--pos { fill: var(--red); } .fg-et--neg { fill: var(--green); }
+.fg-lin--n0, .fg-pt--n0 { stroke: var(--red); fill: var(--red); } .fg-et--n0 { fill: var(--red); }
+.fg-lin--n1, .fg-pt--n1 { stroke: var(--amber); fill: var(--amber); } .fg-et--n1 { fill: var(--amber); }
+.fg-lin--n2, .fg-pt--n2 { stroke: var(--green); fill: var(--green); } .fg-et--n2 { fill: var(--green); }
+.fg-lin--n3, .fg-pt--n3 { stroke: var(--pP); fill: var(--pP); } .fg-et--n3 { fill: var(--pP); }
+.fg-lin--n4, .fg-pt--n4 { stroke: var(--pA); fill: var(--pA); } .fg-et--n4 { fill: var(--pA); }
+.fg-pre { fill: var(--cyan); }
+.fg-umbral { stroke: var(--cyan); stroke-width: 2; stroke-dasharray: 4 3; }
+.fg-txt--um { fill: var(--cyan); font-weight: 800; }
+.tabla-scroll { overflow-x: auto; max-width: 100%; }
+@media (max-width: 480px) { .tabla-res { font-size: 12.5px; } .tabla-res th, .tabla-res td { padding: 5px 4px; } }
