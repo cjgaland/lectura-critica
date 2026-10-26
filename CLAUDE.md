@@ -63,6 +63,7 @@ Base copiada de `AMFE/Aplicación` (que viene de Auditorías). Archivos:
 - Al terminar de probar, borrar del navegador los datos de prueba (`lecturacritica-datos`).
 
 ## 5. Versiones
+- Al publicar una versión, después del push: `node actualizar.mjs lectura-critica` desde `Ecosistema Calidad/Ediciones independientes/` (pone al día y publica la edición independiente; ver «Edición independiente»).
 - `APP_VERSION` y `NOVEDADES` al principio de `app.js` (formato AAAA.NN, la más reciente arriba). Al cambiar: `?v=` de index.html y `CACHE_NAME` de sw.js.
 
 ## 6. Copias de seguridad locales
@@ -80,6 +81,7 @@ Publicada el 2026-10-26 (v2026.04) a petición del autor: repositorio público `
 
 ## 7 bis. Edición independiente (desde el 2026-10-26)
 Hay una versión de Lectura Crítica para regalar sola, sin enlaces al resto del ecosistema: `../Edición independiente/` (repositorio git propio; publicada el 2026-10-26 en `herramientas-calidad/lectura-critica` → https://herramientas-calidad.github.io/lectura-critica/). **No se edita a mano**: la fabrica `node generar.mjs lectura-critica` desde `Ecosistema Calidad/Ediciones independientes/` (diseño en `DISEÑO_EDICIONES.md`, uso en `LEEME.md`, ficha en `apps/lectura-critica.json`). Para actualizarla: `node generar.mjs lectura-critica --commit` y `git push` en la edición.
+- **Paso obligatorio de cada versión** (decisión del autor, 2026-10-26): después de publicar (push) esta app, poner al día y publicar su edición: `node actualizar.mjs lectura-critica` desde `Ecosistema Calidad/Ediciones independientes/` (fabrica, verifica, hace commit y push; también actualiza las ediciones que la llevan dentro). Si el generador falla, casi siempre falta una marca `[eco]` en lo nuevo: corregirla y repetir.
 - **Marcas** (comentarios; no cambian nada en la app del ecosistema): `[eco]`…`[/eco]` = solo ecosistema, se quita en la edición; `/* [ind]` … `[/ind] */` (o `<!-- [ind]` … `[/ind] -->`) = solo edición, se descomenta. En línea propia o dentro de una línea (`/*[eco]*/…/*[/eco]*/`, `<!--[eco]-->…<!--[/eco]-->`). Dentro de un texto HTML de app.js, usar la forma `<!-- -->`. Los tests que se pasan sobre la edición también pasan por las marcas.
 - **Al añadir** un enlace a otra app, un «Traer de…», una mención a la Guía, un texto sobre pasar datos «en el mismo navegador» o una entrada de NOVEDADES que solo hable del ecosistema: rodearlo con `[eco]` y, si hace falta, poner su alternativa con `[ind]`. Una clave nueva de `localStorage` se añade a `claves` en la ficha. Si se olvida, el generador o su verificación fallan y dicen dónde. Comentarios y rótulos sueltos se cambian en la ficha (`reemplazos`).
 - **Tamaño Muestral va dentro** (como en Indicadores): subcarpeta `tamano-muestral/` con prefijo `ei-lc-tm-`; en la edición `URL_TM` es `"tamano-muestral/"` (marca `[ind]` en logic.js). Se quitan el botón «Normalizar la cita» (el Normalizador Bibliográfico es otra herramienta) y las citas a la Guía.
