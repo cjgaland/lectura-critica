@@ -14,8 +14,10 @@
   // ---------- Versión y novedades ----------
   // Al publicar cambios: añadir una entrada AL PRINCIPIO de NOVEDADES, poner su versión en los ?v= de index.html, en
   // APP_VERSION y subir CACHE_NAME en sw.js. Formato de versión: AAAA.NN.
-  const APP_VERSION = "2026.05";
+  const APP_VERSION = "2026.06";
   const NOVEDADES = [
+    { version: "2026.06", fecha: "Octubre 2026", titulo: "Semáforo más legible", cambios: [
+      "En el veredicto, el color de cada bloque del semáforo («Ámbar», «Verde»…) ya no se monta encima del motivo propuesto, y el motivo que escribes al cambiar un color tiene dos líneas para leerlo entero."] },
     // [eco]
     { version: "2026.05", fecha: "Octubre 2026", titulo: "Tus lecturas, en las demás apps", cambios: [
       "AMFE, DAFO · CAME, Auditorías e Indicadores ya pueden traer tus lecturas con su botón «Traer de Lectura Crítica»: la referencia, el resultado principal, el mensaje y tu decisión, como evidencia de una acción de mejora, una fuente del DAFO, el origen y el criterio de una auditoría o el criterio de un indicador.",
@@ -836,10 +838,10 @@
     const s = L.semaforo(l, b), m = l.veredicto.semaforo[b], p = s.propuesto;
     return `<div class="sem-card">
       <div class="sem-cab"><b>${esc(PL.BLOQUES[b].titulo)}</b><a href="#/lectura/${l.id}/${L.BLOQUE_PASO[b]}">Paso ${L.BLOQUE_PASO[b]}</a></div>
-      <p class="sem-luz">${luz(s.color, COLOR_TXT[s.color])}</p>
+      <p class="sem-estado">${luz(s.color, COLOR_TXT[s.color])}</p>
       <p class="sem-mot">${esc(p.color ? `Propuesto: ${COLOR_TXT[p.color].toLowerCase()}. ${p.motivo}` : p.motivo)}</p>
       <div class="seg seg--mini seg--luz" role="group"><button type="button" class="${!m ? "active" : ""}" data-act="sem" data-b="${b}" data-v="">Propuesta</button>${["verde", "ambar", "rojo"].map(c => `<button type="button" class="seg-${c}${m === c ? " active" : ""}" data-act="sem" data-b="${b}" data-v="${c}">${COLOR_TXT[c]}</button>`).join("")}</div>
-      ${m ? `<input class="txt-in" data-k="veredicto.motivoSemaforo.${b}" value="${esc(l.veredicto.motivoSemaforo[b])}" placeholder="${p.color ? "¿Por qué lo cambias?" : "Motivo (opcional)"}" autocomplete="off" />` : ""}
+      ${m ? `<textarea class="txt-in" rows="2" data-k="veredicto.motivoSemaforo.${b}" placeholder="${p.color ? "¿Por qué lo cambias?" : "Motivo (opcional)"}" aria-label="Motivo del color">${esc(l.veredicto.motivoSemaforo[b])}</textarea>` : ""}
     </div>`;
   }
 
