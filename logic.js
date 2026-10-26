@@ -15,6 +15,7 @@
   const CA = enNode ? require("./calculos.js") : raiz.Calculos;
 
   const VERSION_DATOS = 1;
+  // [eco]
   const URL_AUD = "https://cjgaland.github.io/auditorias/";
   const URL_IND = "https://cjgaland.github.io/indicadores-calidad/";
   const URL_TM = "https://cjgaland.github.io/tamano-muestral/";
@@ -25,6 +26,11 @@
   const URL_RONDAS = "https://cjgaland.github.io/rondas-seguridad/";
   const URL_NORM = "https://cjgaland.github.io/normalizador-bibliografico/";
   const URL_PORTAL = "https://cjgaland.github.io/";
+  // [/eco]
+  // En la edición independiente, Tamaño Muestral va dentro, en su subcarpeta
+  /* [ind]
+  const URL_TM = "tamano-muestral/";
+  [/ind] */
 
   // ---------- Utilidades ----------
   const lleno = v => v != null && String(v).trim() !== "";
@@ -612,7 +618,10 @@
   }
 
   const API = {
-    VERSION_DATOS, URL_AUD, URL_IND, URL_TM, URL_AMFE, URL_FLUJO, URL_DAFO, URL_MAPA, URL_RONDAS, URL_NORM, URL_PORTAL,
+    VERSION_DATOS, URL_TM,
+    // [eco]
+    URL_AUD, URL_IND, URL_AMFE, URL_FLUJO, URL_DAFO, URL_MAPA, URL_RONDAS, URL_NORM, URL_PORTAL,
+    // [/eco]
     lleno, sinTildes, corto, plural, fmtFecha,
     PASOS, PASO_BLOQUE, BLOQUE_PASO, RESPUESTAS, DECISIONES, COLORES, IMPORTANCIA, CLAVE_APLICA,
     plantilla, preguntasDe, numeroDe, PREFIJOS,

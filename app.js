@@ -16,8 +16,14 @@
   // APP_VERSION y subir CACHE_NAME en sw.js. Formato de versión: AAAA.NN.
   const APP_VERSION = "2026.05";
   const NOVEDADES = [
+    // [eco]
     { version: "2026.05", fecha: "Octubre 2026", titulo: "Tus lecturas, en las demás apps", cambios: [
       "AMFE, DAFO · CAME, Auditorías e Indicadores ya pueden traer tus lecturas con su botón «Traer de Lectura Crítica»: la referencia, el resultado principal, el mensaje y tu decisión, como evidencia de una acción de mejora, una fuente del DAFO, el origen y el criterio de una auditoría o el criterio de un indicador.",
+    // [/eco]
+    /* [ind]
+    { version: "2026.05", fecha: "Octubre 2026", titulo: "Tus lecturas, en otras herramientas", cambios: [
+      "La copia de seguridad (.json) lleva tus lecturas en un formato que otras herramientas (AMFE, DAFO · CAME, auditorías, indicadores) pueden importar: la referencia, el resultado principal, el mensaje y tu decisión.",
+    [/ind] */
       "Corregido el texto del metaanálisis: ahora dice «Efecto combinado (riesgo relativo)» en lugar de «Riesgo relativo combinada»."] },
     { version: "2026.04", fecha: "Octubre 2026", titulo: "Metaanálisis, supervivencia, umbrales y concordancia", cambios: [
       "Metaanálisis con diagrama de bosque: odds ratio, riesgo relativo, diferencia de riesgos, hazard ratio y diferencias de medias (también estandarizadas), con efectos fijos (Mantel-Haenszel, Peto o inverso de la varianza) y aleatorios (DerSimonian-Laird), heterogeneidad (Q, I² con su intervalo y τ²), gráfico en embudo y prueba de Egger.",
@@ -209,6 +215,7 @@
         <a class="guide-card" href="#/glosario"><span class="guide-num">A–Z</span><div><div class="guide-q">Glosario</div><div class="guide-a">${C.GLOSARIO.length} términos <b>en lenguaje llano</b>, con buscador.</div></div><span class="guide-go">›</span></a>
         <a class="guide-card" href="#/plantillas"><span class="guide-num">9</span><div><div class="guide-q">Las plantillas</div><div class="guide-a">Las <b>ocho plantillas</b> CASPe con nuestras preguntas, la propia de <b>antes-después</b> y su versión <b>en blanco</b> para imprimir.</div></div><span class="guide-go">›</span></a>
         <a class="guide-card" href="#/tipo"><span class="guide-num">?</span><div><div class="guide-q">¿Qué tipo de estudio tengo?</div><div class="guide-a">Unas preguntas de <b>sí o no</b> con las palabras que delatan cada diseño.</div></div><span class="guide-go">›</span></a>
+        <!-- [eco] -->
         <a class="guide-card guide-card--hermana" href="${L.URL_TM}" target="_blank" rel="noopener"><span class="guide-num">n</span><div><div class="guide-q">Tamaño Muestral ↗</div><div class="guide-a">App hermana: <b>¿tenía el estudio muestra suficiente?</b> Calcula cuántos casos hacían falta.</div></div><span class="guide-go">›</span></a>
         <a class="guide-card guide-card--hermana" href="${L.URL_IND}" target="_blank" rel="noopener"><span class="guide-num">%</span><div><div class="guide-q">Indicadores ↗</div><div class="guide-a">App hermana: <b>convierte lo que decides aplicar en un indicador</b> con su estándar, para medir si se cumple.</div></div><span class="guide-go">›</span></a>
         <a class="guide-card guide-card--hermana" href="${L.URL_AUD}" target="_blank" rel="noopener"><span class="guide-num">✓</span><div><div class="guide-q">Auditorías ↗</div><div class="guide-a">App hermana: <b>audita si la práctica que adoptaste se aplica</b>, con su plan anual y la mejora continua.</div></div><span class="guide-go">›</span></a>
@@ -219,6 +226,10 @@
         <a class="guide-card guide-card--hermana" href="${L.URL_RONDAS}" target="_blank" rel="noopener"><span class="guide-num">✓</span><div><div class="guide-q">Rondas de Seguridad ↗</div><div class="guide-a">App hermana: <b>comprueba en las rondas</b> de tu unidad si la práctica segura se cumple.</div></div><span class="guide-go">›</span></a>
         <a class="guide-card guide-card--hermana" href="${L.URL_NORM}" target="_blank" rel="noopener"><span class="guide-num">“”</span><div><div class="guide-q">Normalizador Bibliográfico ↗</div><div class="guide-a">Herramienta de apoyo: pon la <b>referencia del artículo</b> en Vancouver, APA y otros estilos.</div></div><span class="guide-go">›</span></a>
         <a class="guide-card guide-card--hermana" href="${L.URL_PORTAL}" target="_blank" rel="noopener"><span class="guide-num">⌂</span><div><div class="guide-q">Todas las apps ↗</div><div class="guide-a">El <b>portal</b> del ecosistema de calidad y seguridad del paciente.</div></div><span class="guide-go">›</span></a>
+        <!-- [/eco] -->
+        <!-- [ind]
+        <a class="guide-card guide-card--hermana" href="${L.URL_TM}" target="_blank" rel="noopener"><span class="guide-num">n</span><div><div class="guide-q">Tamaño Muestral ↗</div><div class="guide-a">Calculadora incluida: <b>¿tenía el estudio muestra suficiente?</b> Calcula cuántos casos hacían falta.</div></div><span class="guide-go">›</span></a>
+        [/ind] -->
       </div>
       ${practica("<b>Protección de datos:</b> leer un artículo no necesita datos de pacientes. No escribas nombres de pacientes ni números de historia clínica.")}`;
   }
@@ -302,7 +313,9 @@
         <h2 class="sub-h">El artículo</h2>
         ${campo(l, "titulo", "Título", { area: true, rows: 1, ph: "Título del artículo" })}
         ${campo(l, "referencia.texto", "Referencia", { area: true, rows: 2, ph: "Autores. Título. Revista. Año;volumen(número):páginas. DOI", help: "Pégala tal como la tengas. Con «Normalizar la cita» la pasas al Normalizador Bibliográfico para ponerla en Vancouver, APA u otro estilo." })}
+        <!-- [eco] -->
         <div class="toolbar"><button class="btn" data-act="normalizar">“” Normalizar la cita ↗</button></div>
+        <!-- [/eco] -->
         <details class="mas-datos"><summary>Más datos de la referencia</summary>
           ${campo(l, "referencia.autores", "Autores", { opt: true })}
           ${campo(l, "referencia.revista", "Revista", { opt: true })}
@@ -1207,7 +1220,7 @@
         <h1 class="page-title">Aprende</h1>
         <p class="page-lead">${T.length} temas cortos, explicados fácil, para tener a mano mientras lees un artículo.</p>
         <div class="temas">${T.map(x => `<a class="tema-card pdca--${x.c}" href="#/aprende/${x.n}"><span class="tema-n">${x.n}</span><span><b>${x.titulo}</b><span>${x.sub}</span></span></a>`).join("")}</div>
-        ${practica("El método de lectura (pregunta PICO, filtro de dos minutos, tres preguntas y decisión) es el del capítulo «Leer un artículo en diez minutos» de la <i>Guía de Calidad y Seguridad del Paciente</i> de los autores, en preparación.")}`;
+        <!--[eco]-->${practica("El método de lectura (pregunta PICO, filtro de dos minutos, tres preguntas y decisión) es el del capítulo «Leer un artículo en diez minutos» de la <i>Guía de Calidad y Seguridad del Paciente</i> de los autores, en preparación.")}<!--[/eco]-->`;
       return;
     }
     const prev = T.find(x => x.n === n - 1), next = T.find(x => x.n === n + 1);
@@ -1595,7 +1608,9 @@
       case "del-con": l.confusores = l.confusores.filter(x => x.id !== b.dataset.id); tocado(l); repintar(); return;
       case "nueva-acc": l.veredicto.acciones.push(L.nuevaAccion(genId())); tocado(l); repintar(); { const ins = $$("[data-acc][data-f='que']"); if (ins.length) ins[ins.length - 1].focus(); } return;
       case "del-acc": l.veredicto.acciones = l.veredicto.acciones.filter(x => x.id !== b.dataset.id); tocado(l); repintar(); return;
+      // [eco]
       case "normalizar": normalizarCita(l); return;
+      // [/eco]
       case "pubmed-filtro": filtroPubMed = b.dataset.v; repintar(); return;
       case "voto": L.ponerVoto(l, b.dataset.q, b.dataset.a, b.dataset.v); tocado(l); { const y = window.scrollY; route(); window.scrollTo(0, y); } return;
       case "usar-mayoria": L.ponerRespuesta(l, b.dataset.q, "valor", b.dataset.v); tocado(l); { const y = window.scrollY; route(); window.scrollTo(0, y); } return;
@@ -1635,6 +1650,7 @@
   $("#input-importar").addEventListener("change", e => { const f = e.target.files[0]; if (f) importar(f); e.target.value = ""; });
   $("#banner-copiar").addEventListener("click", copiarAMisDatos);
 
+  // [eco]
   // Copia la referencia y abre el Normalizador Bibliográfico (herramienta de apoyo: no se pasan datos)
   async function normalizarCita(l) {
     const r = l.referencia, texto = lleno(r.texto) ? r.texto : [r.autores, l.titulo, r.revista, r.anio, r.doi && "doi: " + r.doi].filter(lleno).join(". ");
@@ -1642,6 +1658,7 @@
     else toast("Escribe antes la referencia del artículo.", 3500);
     if (lleno(texto)) window.open(L.URL_NORM, "_blank", "noopener");
   }
+  // [/eco]
 
   // ---------- Tema ----------
   function setTema(t) {
