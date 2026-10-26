@@ -510,7 +510,7 @@
   function textoMeta(r) {
     if (!r || !r.ok) return "";
     const M = MEDIDAS_META[r.medida], A = r.aleatorio, F = r.fijo, f = M.log || r.medida === "dr" ? (x => fmt(x)) : (x => fmt(x, 2));
-    let t = `${r.k} estudios. ${M.nom} combinada: ${f(A.v)} (IC 95 %: ${f(A.inf)} a ${f(A.sup)}) con efectos aleatorios; ${f(F.v)} (${f(F.inf)} a ${f(F.sup)}) con efectos fijos. `;
+    let t = `${r.k} estudios. Efecto combinado (${M.nom.charAt(0).toLowerCase() + M.nom.slice(1)}): ${f(A.v)} (IC 95 %: ${f(A.inf)} a ${f(A.sup)}) con efectos aleatorios; ${f(F.v)} (${f(F.inf)} a ${f(F.sup)}) con efectos fijos. `;
     t += `Heterogeneidad: I² ${pct(r.i2, 0)}${ok(r.i2Inf) ? ` (IC 95 %: ${pct(r.i2Inf, 0)} a ${pct(r.i2Sup, 0)})` : ""}, Q ${fmt(r.q, 1)} con ${r.gl} gl (p ${r.pQ < 0.001 ? "< 0,001" : "= " + fmt(r.pQ, 3)}).`;
     if (r.egger) t += ` Egger: p = ${fmt(r.egger.p, 2)}.`;
     return t;

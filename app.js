@@ -14,8 +14,11 @@
   // ---------- Versión y novedades ----------
   // Al publicar cambios: añadir una entrada AL PRINCIPIO de NOVEDADES, poner su versión en los ?v= de index.html, en
   // APP_VERSION y subir CACHE_NAME en sw.js. Formato de versión: AAAA.NN.
-  const APP_VERSION = "2026.04";
+  const APP_VERSION = "2026.05";
   const NOVEDADES = [
+    { version: "2026.05", fecha: "Octubre 2026", titulo: "Tus lecturas, en las demás apps", cambios: [
+      "AMFE, DAFO · CAME, Auditorías e Indicadores ya pueden traer tus lecturas con su botón «Traer de Lectura Crítica»: la referencia, el resultado principal, el mensaje y tu decisión, como evidencia de una acción de mejora, una fuente del DAFO, el origen y el criterio de una auditoría o el criterio de un indicador.",
+      "Corregido el texto del metaanálisis: ahora dice «Efecto combinado (riesgo relativo)» en lugar de «Riesgo relativo combinada»."] },
     { version: "2026.04", fecha: "Octubre 2026", titulo: "Metaanálisis, supervivencia, umbrales y concordancia", cambios: [
       "Metaanálisis con diagrama de bosque: odds ratio, riesgo relativo, diferencia de riesgos, hazard ratio y diferencias de medias (también estandarizadas), con efectos fijos (Mantel-Haenszel, Peto o inverso de la varianza) y aleatorios (DerSimonian-Laird), heterogeneidad (Q, I² con su intervalo y τ²), gráfico en embudo y prueba de Egger.",
       "Supervivencia: el hazard ratio de un estudio, también cuando el artículo solo da la p del log-rank, los eventos observados y esperados o las medianas (métodos de Parmar).",
