@@ -14,8 +14,12 @@
   // ---------- Versión y novedades ----------
   // Al publicar cambios: añadir una entrada AL PRINCIPIO de NOVEDADES, poner su versión en los ?v= de index.html, en
   // APP_VERSION y subir CACHE_NAME en sw.js. Formato de versión: AAAA.NN.
-  const APP_VERSION = "2026.06";
+  const APP_VERSION = "2026.07";
   const NOVEDADES = [
+    // [eco]
+    { version: "2026.07", fecha: "Octubre 2026", titulo: "Nueva app hermana: ACR · Ishikawa", cambios: [
+      "Enlace a la nueva app hermana ACR · Ishikawa en la portada y en «Acerca de»: busca las causas de fondo de un problema o de un incidente con el diagrama de Ishikawa y el análisis causa raíz, sin buscar culpables. Trae la evidencia de tus lecturas para apoyar sus acciones."] },
+    // [/eco]
     { version: "2026.06", fecha: "Octubre 2026", titulo: "Semáforo más legible", cambios: [
       "En el veredicto, el color de cada bloque del semáforo («Ámbar», «Verde»…) ya no se monta encima del motivo propuesto, y el motivo que escribes al cambiar un color tiene dos líneas para leerlo entero."] },
     // [eco]
@@ -226,6 +230,7 @@
         <a class="guide-card guide-card--hermana" href="${L.URL_DAFO}" target="_blank" rel="noopener"><span class="guide-num">D</span><div><div class="guide-q">DAFO · CAME ↗</div><div class="guide-a">App hermana: <b>analiza tu unidad</b> y decide qué problema merece buscar evidencia.</div></div><span class="guide-go">›</span></a>
         <a class="guide-card guide-card--hermana" href="${L.URL_MAPA}" target="_blank" rel="noopener"><span class="guide-num">◆</span><div><div class="guide-q">Mapa de Riesgos ↗</div><div class="guide-a">App hermana: <b>elabora el mapa de riesgos</b> de un proceso, con su flujograma y su AMFE.</div></div><span class="guide-go">›</span></a>
         <a class="guide-card guide-card--hermana" href="${L.URL_RONDAS}" target="_blank" rel="noopener"><span class="guide-num">✓</span><div><div class="guide-q">Rondas de Seguridad ↗</div><div class="guide-a">App hermana: <b>comprueba en las rondas</b> de tu unidad si la práctica segura se cumple.</div></div><span class="guide-go">›</span></a>
+        <a class="guide-card guide-card--hermana" href="${L.URL_ACR}" target="_blank" rel="noopener"><span class="guide-num">ACR</span><div><div class="guide-q">ACR · Ishikawa ↗</div><div class="guide-a">App hermana: <b>busca las causas de fondo</b> de un problema con el diagrama de Ishikawa; la evidencia de tus lecturas apoya sus acciones.</div></div><span class="guide-go">›</span></a>
         <a class="guide-card guide-card--hermana" href="${L.URL_NORM}" target="_blank" rel="noopener"><span class="guide-num">“”</span><div><div class="guide-q">Normalizador Bibliográfico ↗</div><div class="guide-a">Herramienta de apoyo: pon la <b>referencia del artículo</b> en Vancouver, APA y otros estilos.</div></div><span class="guide-go">›</span></a>
         <a class="guide-card guide-card--hermana" href="${L.URL_PORTAL}" target="_blank" rel="noopener"><span class="guide-num">⌂</span><div><div class="guide-q">Todas las apps ↗</div><div class="guide-a">El <b>portal</b> del ecosistema de calidad y seguridad del paciente.</div></div><span class="guide-go">›</span></a>
         <!-- [/eco] -->

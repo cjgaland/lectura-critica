@@ -24,6 +24,7 @@
   const URL_DAFO = "https://cjgaland.github.io/dafo/";
   const URL_MAPA = "https://cjgaland.github.io/mapa-riesgos/";
   const URL_RONDAS = "https://cjgaland.github.io/rondas-seguridad/";
+  const URL_ACR = "https://cjgaland.github.io/acr-ishikawa/";
   const URL_NORM = "https://cjgaland.github.io/normalizador-bibliografico/";
   const URL_PORTAL = "https://cjgaland.github.io/";
   // [/eco]
@@ -620,7 +621,7 @@
   const API = {
     VERSION_DATOS, URL_TM,
     // [eco]
-    URL_AUD, URL_IND, URL_AMFE, URL_FLUJO, URL_DAFO, URL_MAPA, URL_RONDAS, URL_NORM, URL_PORTAL,
+    URL_AUD, URL_IND, URL_AMFE, URL_FLUJO, URL_DAFO, URL_MAPA, URL_RONDAS, URL_ACR, URL_NORM, URL_PORTAL,
     // [/eco]
     lleno, sinTildes, corto, plural, fmtFecha,
     PASOS, PASO_BLOQUE, BLOQUE_PASO, RESPUESTAS, DECISIONES, COLORES, IMPORTANCIA, CLAVE_APLICA,

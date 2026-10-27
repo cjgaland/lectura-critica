@@ -7,7 +7,7 @@ Guía de referencia para el desarrollo asistido por IA. Léela antes de proponer
 ## 1. Descripción
 PWA estática (sin build, sin dependencias, sin CDN) para **leer críticamente un artículo** paso a paso y de forma didáctica: pregunta PICO y referencia, filtro de dos minutos, tipo de estudio, las tres preguntas de la lectura crítica (¿es válido?, ¿qué dice?, ¿me sirve?) con las **preguntas de eliminación primero**, y veredicto con semáforo y decisión (aplicar · esperar · descartar). Idea de Carlos. Acompaña al capítulo 26 de la Guía («Leer un artículo en diez minutos»).
 
-Es una **herramienta** del ecosistema (funciona sola). Hermana de Tamaño Muestral, Indicadores, Auditorías, AMFE, Flujograma, DAFO · CAME, Mapa de Riesgos y Rondas de Seguridad (enlazadas en «Acerca de»). En la portada enlaza todas las hermanas, el Normalizador Bibliográfico y el portal.
+Es una **herramienta** del ecosistema (funciona sola). Hermana de Tamaño Muestral, Indicadores, Auditorías, AMFE, Flujograma, DAFO · CAME, Mapa de Riesgos y Rondas de Seguridad y ACR · Ishikawa (enlazadas en «Acerca de»). En la portada enlaza todas las hermanas, el Normalizador Bibliográfico y el portal.
 
 Autoría (idéntica en el pie de index.html, «Acerca de» y el README; orden alfabético, sin centro de trabajo): Carlos J. Galán Doval (Médico de Familia · Técnico en Calidad y Seguridad del Paciente) y Rafael J. Romero de Castilla Gil (Médico de Familia · Responsable del Área de Calidad y Seguridad del Paciente), Área de Gestión Sanitaria Sur de Córdoba · Andalucía.
 
@@ -95,3 +95,4 @@ Hay una versión de Lectura Crítica para regalar sola, sin enlaces al resto del
 - **v2026.05 (2026-10-26)**: novedad «Tus lecturas, en las demás apps» (AMFE, DAFO, Auditorías e Indicadores ya las traen) y texto del metaanálisis corregido («Efecto combinado (riesgo relativo)» en `textoMeta` y en `resultadoClave`).
 - **2026-10-26 (sin cambio de versión)**: marcas `[eco]`/`[ind]` para la edición independiente (apartado 7 bis). La app del ecosistema no cambia.
 - **v2026.06 (2026-10-26)**: el color de cada tarjeta del semáforo usa la clase `sem-estado` (antes `sem-luz`, que choca con el círculo de 22 px de la base copiada de AMFE y montaba el texto encima del motivo); el motivo del color manual es un `textarea` de 2 líneas. Al añadir clases propias, comprobar que no existen ya en las líneas 1-1104 de styles.css.
+- **v2026.07 (2026-10-27)**: enlace a la nueva app hermana ACR · Ishikawa (https://cjgaland.github.io/acr-ishikawa/, `L.URL_ACR`) en la portada y en «Acerca de», dentro de marcas `[eco]`.
