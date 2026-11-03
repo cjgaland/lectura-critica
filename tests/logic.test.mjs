@@ -9,7 +9,7 @@ const t = (nombre, cond) => { if (cond) ok++; else { fallos++; console.error("�
 const eq = (nombre, a, b) => t(`${nombre} (esperado ${JSON.stringify(b).slice(0, 300)}, obtenido ${JSON.stringify(a).slice(0, 300)})`, JSON.stringify(a) === JSON.stringify(b));
 let n = 0; const gid = () => "id" + (++n);
 
-// ---------- Plantillas: las cuentas del capítulo 26 y las preguntas de eliminación de cada original ----------
+// ---------- Plantillas: las cuentas del capítulo 29 y las preguntas de eliminación de cada original ----------
 const CUENTAS = { ensayo: 11, revision: 10, diagnostico: 10, cohortes: 11, casos: 11, cualitativo: 10, economica: 11, prediccion: 11, antesdespues: 11 };
 const ELIM = { ensayo: 3, revision: 2, diagnostico: 3, cohortes: 2, casos: 2, cualitativo: 3, economica: 2, prediccion: 3, antesdespues: 2 };
 eq("Ocho plantillas CASPe y la propia", PL.PLANTILLAS.map(p => p.id).sort(), Object.keys(CUENTAS).sort());
@@ -84,7 +84,7 @@ eq("Aplicabilidad verde", L.semaforoPropuesto(l, "aplicabilidad").color, "verde"
 eq("Decisión propuesta: aplicar", L.decisionPropuesta(l).decision, "aplicar");
 L.ponerRespuesta(l, "ec-9", "valor", "no");
 eq("Aplicabilidad roja por la pregunta clave", L.semaforoPropuesto(l, "aplicabilidad").color, "rojo");
-eq("Válido pero no aplicable: esperar (como en el capítulo 26)", L.decisionPropuesta(l).decision, "esperar");
+eq("Válido pero no aplicable: esperar (como en el capítulo 29)", L.decisionPropuesta(l).decision, "esperar");
 L.ponerRespuesta(l, "ec-9", "valor", "si"); L.ponerRespuesta(l, "ec-10", "valor", "no");
 eq("Aplicabilidad ámbar por un «No» que no es clave", L.semaforoPropuesto(l, "aplicabilidad").color, "ambar");
 eq("Algún ámbar: esperar", L.decisionPropuesta(l).decision, "esperar");
