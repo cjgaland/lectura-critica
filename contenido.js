@@ -1,7 +1,7 @@
 // ============================================================
 //  contenido.js — Solo datos · Lectura Crítica
 //  Aprende (temas), Ponte a prueba (test propio y ejercicios), glosario y
-//  ejemplos: la sesión de Urgencias del capítulo 29 de la Guía y los minicasos.
+//  ejemplos: la sesión de Urgencias del capítulo 30 de la Guía y los minicasos.
 //  Todo es contenido propio de los autores; los artículos de los ejemplos son
 //  FICTICIOS (la escala «EAT» no existe) y así se dice en pantalla.
 //  window.Contenido en navegador y module.exports en Node (tests).
